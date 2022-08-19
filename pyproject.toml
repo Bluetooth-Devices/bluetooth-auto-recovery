@@ -29,6 +29,8 @@ python = "^3.7"
 Sphinx = {version = "^5.0", optional = true}
 sphinx-rtd-theme = {version = "^1.0", optional = true}
 myst-parser = {version = "^0.18", optional = true}
+PyRIC = ">=0.1.6.3"
+btsocket = ">=0.2.0"
 
 [tool.poetry.extras]
 docs = [

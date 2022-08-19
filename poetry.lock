@@ -40,6 +40,20 @@ python-versions = ">=3.6"
 pytz = ">=2015.7"
 
 [[package]]
+name = "btsocket"
+version = "0.2.0"
+description = "Python library for BlueZ Bluetooth Management API"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.extras]
+test = ["pycodestyle", "coverage"]
+rel = ["twine", "bumpversion"]
+docs = ["pygments", "sphinx-rtd-theme", "sphinx"]
+dev = ["pycodestyle", "coverage", "pygments", "sphinx-rtd-theme", "sphinx", "twine", "bumpversion"]
+
+[[package]]
 name = "certifi"
 version = "2022.6.15"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -275,6 +289,14 @@ python-versions = ">=3.6.8"
 
 [package.extras]
 diagrams = ["railroad-diagrams", "jinja2"]
+
+[[package]]
+name = "pyric"
+version = "0.1.6.3"
+description = "Python Wireless Library"
+category = "main"
+optional = false
+python-versions = "*"
 
 [[package]]
 name = "pytest"
@@ -520,13 +542,14 @@ docs = ["myst-parser", "Sphinx", "sphinx-rtd-theme"]
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "6c5abe1f014019df280ea421d5d97d382c2bd65b33cef4ef14b4239c7f1eb1c4"
+content-hash = "3cd718bac4585381eb199877bcf138140792d3b374921f2dcea9ef1e49c96871"
 
 [metadata.files]
 alabaster = []
 atomicwrites = []
 attrs = []
 babel = []
+btsocket = []
 certifi = []
 charset-normalizer = []
 colorama = []
@@ -547,6 +570,7 @@ pluggy = []
 py = []
 pygments = []
 pyparsing = []
+pyric = []
 pytest = []
 pytest-cov = []
 pytz = []
