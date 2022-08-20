@@ -13,6 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 POWER_OFF_TIME = 2
 POWER_ON_TIME = 3
 MAX_RESET_TIME = 10
+DBUS_REGISTER_TIME = 0.5
 
 
 def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
@@ -159,6 +160,8 @@ async def _reset_bluetooth(hci: int) -> bool:
             _LOGGER.debug(
                 "Power state of bluetooth adapter hci%i is ON after power cycle", hci
             )
+        # Give Dbus some time to catch up
+        await asyncio.sleep(DBUS_REGISTER_TIME)
         return True
 
     if pstate_after is False:
