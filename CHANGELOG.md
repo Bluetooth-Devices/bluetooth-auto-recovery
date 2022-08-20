@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.2.2 (2022-08-20)
+### Fix
+* Give Dbus a bit more time to catch up if the adapter has been recovered ([#7](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/7)) ([`216ef1f`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/216ef1fd0e9ec4ed3b022f9f194282d7b2b359cf))
+
 ## v0.2.1 (2022-08-20)
 ### Fix
 * Handle libc.so.6 missing ([#6](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/6)) ([`0d9f4cb`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/0d9f4cbc9bf2a422c2f7a889354b76cfe7c75620))
