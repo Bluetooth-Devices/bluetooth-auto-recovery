@@ -19,7 +19,14 @@ DBUS_REGISTER_TIME = 0.5
 def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
     """Execute the rfkill list bluetooth command."""
     hci_idx = f"hci{hci}"
-    rfkill_dict = rfkill.rfkill_list()
+    try:
+        rfkill_dict = rfkill.rfkill_list()
+    except FileNotFoundError as ex:
+        _LOGGER.warning(
+            "rfkill at /dev/rfkill is not accessible, cannot check bluetooth adapter: %s",
+            ex,
+        )
+        return None, None
     try:
         rfkill_hci_state = rfkill_dict[hci_idx]
     except KeyError:
