@@ -13,7 +13,7 @@ _LOGGER = logging.getLogger(__name__)
 POWER_OFF_TIME = 2
 POWER_ON_TIME = 3
 MAX_RESET_TIME = 10
-DBUS_REGISTER_TIME = 0.5
+DBUS_REGISTER_TIME = 1.0
 
 
 def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
