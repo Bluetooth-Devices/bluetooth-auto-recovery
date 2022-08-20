@@ -131,7 +131,13 @@ async def _reset_bluetooth(hci: int) -> bool:
         _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
         return False
 
-    adapter: MGMTBluetoothCtl = await loop.run_in_executor(None, MGMTBluetoothCtl, hci)
+    try:
+        adapter: MGMTBluetoothCtl = await loop.run_in_executor(
+            None, MGMTBluetoothCtl, hci
+        )
+    except OSError as ex:
+        _LOGGER.warning("Bluetooth adapter hci%i could not be checked: %s", hci, ex)
+        return False
 
     if adapter.mac is None:
         _LOGGER.error(
