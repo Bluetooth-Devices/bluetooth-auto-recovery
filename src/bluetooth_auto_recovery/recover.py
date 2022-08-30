@@ -27,6 +27,12 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
             ex,
         )
         return None, None
+    except PermissionError as ex:
+        _LOGGER.warning(
+            "Access to rfkill at /dev/rfkill is not permitted, cannot check bluetooth adapter: %s",
+            ex,
+        )
+        return None, None
     try:
         rfkill_hci_state = rfkill_dict[hci_idx]
     except KeyError:
@@ -148,10 +154,25 @@ async def _reset_bluetooth(hci: int) -> bool:
         )
         return False
 
-    pstate_before = await loop.run_in_executor(None, adapter.get_powered)
+    try:
+        pstate_before = await loop.run_in_executor(None, adapter.get_powered)
+    except AttributeError as ex:
+        _LOGGER.warning(
+            "Could not determine the power state of the Bluetooth adapter hci%i: %s",
+            hci,
+            ex,
+        )
+        return False
+
     if pstate_before is True:
         _LOGGER.debug("Current power state of bluetooth adapter is ON.")
-        loop.run_in_executor(None, adapter.set_powered, False)
+        try:
+            loop.run_in_executor(None, adapter.set_powered, False)
+        except AttributeError as ex:
+            _LOGGER.warning(
+                "The Bluetooth adapter hci%i could not get power disabled: %s", hci, ex
+            )
+            return False
         await _wait_for_power_state(loop, adapter, False, POWER_OFF_TIME)
     elif pstate_before is False:
         _LOGGER.debug(
@@ -162,7 +183,14 @@ async def _reset_bluetooth(hci: int) -> bool:
         _LOGGER.debug("Power state of bluetooth adapter could not be determined")
         return False
 
-    loop.run_in_executor(None, adapter.set_powered, True)
+    try:
+        loop.run_in_executor(None, adapter.set_powered, True)
+    except AttributeError as ex:
+        _LOGGER.warning(
+            "The Bluetooth adapter hci%i could not get power enabled: %s", hci, ex
+        )
+        return False
+
     pstate_after = await _wait_for_power_state(loop, adapter, True, POWER_ON_TIME)
 
     # Check the state after the reset
