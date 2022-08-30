@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.0 (2022-08-30)
+### Feature
+* Handle no permission to check rfkill ([#8](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/8)) ([`fcda90d`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/fcda90dcdd104608fb2db4b9feca90a7b0e5c8d5))
+
 ## v0.2.2 (2022-08-20)
 ### Fix
 * Give Dbus a bit more time to catch up if the adapter has been recovered ([#7](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/7)) ([`216ef1f`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/216ef1fd0e9ec4ed3b022f9f194282d7b2b359cf))
