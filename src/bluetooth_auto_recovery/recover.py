@@ -170,7 +170,7 @@ async def _reset_bluetooth(hci: int) -> bool:
             loop.run_in_executor(None, adapter.set_powered, False)
         except AttributeError as ex:
             _LOGGER.warning(
-                "The Bluetooth adapter hci%i could not get power disabled: %s", hci, ex
+                "Could not power cycle the Bluetooth adapter hci%i: %s", hci, ex
             )
             return False
         await _wait_for_power_state(loop, adapter, False, POWER_OFF_TIME)
@@ -187,7 +187,9 @@ async def _reset_bluetooth(hci: int) -> bool:
         loop.run_in_executor(None, adapter.set_powered, True)
     except AttributeError as ex:
         _LOGGER.warning(
-            "The Bluetooth adapter hci%i could not get power enabled: %s", hci, ex
+            "Could not re-enable power after cycle of the Bluetooth adapter hci%i: %s",
+            hci,
+            ex,
         )
         return False
 
