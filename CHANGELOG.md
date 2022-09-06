@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.1 (2022-09-06)
+### Fix
+* Handle invalid data in rfkill ([#9](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/9)) ([`31c1480`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/31c148013721b22f01d9a107d01a6d6cc576c815))
+
 ## v0.3.0 (2022-08-30)
 ### Feature
 * Handle no permission to check rfkill ([#8](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/8)) ([`fcda90d`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/fcda90dcdd104608fb2db4b9feca90a7b0e5c8d5))
