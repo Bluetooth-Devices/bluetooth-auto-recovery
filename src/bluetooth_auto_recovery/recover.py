@@ -45,7 +45,7 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
     try:
         rfkill_hci_state = rfkill_dict[hci_idx]
     except KeyError:
-        _LOGGER.error(
+        _LOGGER.debug(
             "RF kill switch check failed - no data for %s. Available data: %s",
             hci_idx,
             rfkill_dict,
