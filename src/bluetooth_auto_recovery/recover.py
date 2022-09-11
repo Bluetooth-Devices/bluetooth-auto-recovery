@@ -22,21 +22,21 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
     try:
         rfkill_dict = rfkill.rfkill_list()
     except FileNotFoundError as ex:
-        _LOGGER.warning(
+        _LOGGER.debug(
             "rfkill at /dev/rfkill is not accessible, cannot check bluetooth adapter %s: %s",
             hci_idx,
             ex,
         )
         return None, None
     except IndexError as ex:
-        _LOGGER.warning(
+        _LOGGER.debug(
             "rfkill at /dev/rfkill returned unexpected results, cannot check bluetooth adapter %s: %s",
             hci_idx,
             ex,
         )
         return None, None
     except PermissionError as ex:
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Access to rfkill at /dev/rfkill is not permitted, cannot check bluetooth adapter %s: %s",
             hci_idx,
             ex,
