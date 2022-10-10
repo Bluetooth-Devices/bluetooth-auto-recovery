@@ -175,6 +175,7 @@ class MGMTBluetoothCtl:
             if self._hci == idx:
                 self.idx = idx
                 self.mac = hci_info.cmd_response_frame.address
+                break
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
