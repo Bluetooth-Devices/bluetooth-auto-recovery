@@ -18,7 +18,7 @@ POWER_ON_TIME = 3
 MAX_RESET_TIME = 10
 DBUS_REGISTER_TIME = 1.0
 
-MGMT_PROTOCOL_TIMEOUT = 10
+MGMT_PROTOCOL_TIMEOUT = 5
 
 
 def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
@@ -56,9 +56,7 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
             rfkill_dict,
         )
         return None, None
-    soft_block = rfkill_hci_state["soft"]
-    hard_block = rfkill_hci_state["hard"]
-    return soft_block, hard_block
+    return rfkill_hci_state["soft"], rfkill_hci_state["hard"]
 
 
 class BluetoothMGMTProtocol(asyncio.Protocol):
@@ -137,9 +135,14 @@ class MGMTBluetoothCtl:
         """Set up management interface."""
         self.sock = btmgmt_socket.open()
         loop = asyncio.get_running_loop()
-        protocol_transport = await loop.create_connection(
-            lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT), sock=self.sock
-        )
+        try:
+            async with async_timeout.timeout(5):
+                protocol_transport = await loop.create_connection(
+                    lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT), sock=self.sock
+                )
+        except asyncio.TimeoutError:
+            btmgmt_socket.close(self.sock)
+            raise
         self.protocol = cast(BluetoothMGMTProtocol, protocol_transport[0])
         await self._find_controller()
 
