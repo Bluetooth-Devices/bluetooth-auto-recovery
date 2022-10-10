@@ -137,8 +137,13 @@ class MGMTBluetoothCtl:
         loop = asyncio.get_running_loop()
         try:
             async with async_timeout.timeout(5):
-                protocol_transport = await loop.create_connection(
-                    lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT), sock=self.sock
+                # _create_connection_transport accessed directly to avoid SOCK_STREAM check
+                # see https://bugs.python.org/issue38285
+                protocol_transport = await loop._create_connection_transport(  # type: ignore[attr-defined]
+                    self.sock,
+                    lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT),
+                    None,
+                    None,
                 )
         except asyncio.TimeoutError:
             btmgmt_socket.close(self.sock)
