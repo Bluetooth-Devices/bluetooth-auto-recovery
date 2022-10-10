@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import socket
+from types import TracebackType
+from typing import Any, cast
 
 import async_timeout
 import pyric.utils.rfkill as rfkill
-from btsocket import btmgmt_protocol, btmgmt_sync
+from btsocket import btmgmt_protocol, btmgmt_socket
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -14,6 +17,8 @@ POWER_OFF_TIME = 2
 POWER_ON_TIME = 3
 MAX_RESET_TIME = 10
 DBUS_REGISTER_TIME = 1.0
+
+MGMT_PROTOCOL_TIMEOUT = 10
 
 
 def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
@@ -56,6 +61,45 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
     return soft_block, hard_block
 
 
+class BluetoothMGMTProtocol(asyncio.Protocol):
+    """Bluetooth MGMT protocol."""
+
+    def __init__(self, timeout: float) -> None:
+        """Initialize the protocol."""
+        self.future: asyncio.Future[btmgmt_protocol.Response] | None = None
+        self.transport: asyncio.Transport | None = None
+        self.timeout = timeout
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        """Handle connection made."""
+        self.transport = cast(asyncio.Transport, transport)
+
+    def data_received(self, data: bytes) -> None:
+        """Handle data received."""
+        response = btmgmt_protocol.reader(data)
+        if response.cmd_response_frame and self.future and not self.future.done():
+            self.future.set_result(response)
+
+    async def send(self, *args: Any) -> btmgmt_protocol.Response:
+        """Send command."""
+        pkt_objs = btmgmt_protocol.command(*args)
+        full_pkt = b""
+        for frame in pkt_objs:
+            if frame:
+                full_pkt += frame.octets
+        self.future = asyncio.Future()
+        assert self.transport is not None  # nosec
+        self.transport.write(full_pkt)
+        with async_timeout.timeout(self.timeout):
+            return await self.future
+
+    def connection_lost(self, exc: Exception | None) -> None:
+        """Handle connection lost."""
+        if exc:
+            _LOGGER.warning("Bluetooth management socket connection lost: %s", exc)
+        self.transport = None
+
+
 class MGMTBluetoothCtl:
     """Class to control interfaces using the BlueZ management API"""
 
@@ -64,8 +108,45 @@ class MGMTBluetoothCtl:
         self.idx: int | None = None
         self.mac: str | None = None
         self._hci = hci
-        self.presented_list = {}
-        idxdata = btmgmt_sync.send("ReadControllerIndexList", None)
+        self.protocol: BluetoothMGMTProtocol | None = None
+        self.presented_list: dict[int, str] = {}
+        self.sock: socket.socket | None = None
+
+    async def __aenter__(self) -> MGMTBluetoothCtl:
+        """Enter the context manager."""
+        await self._setup()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Exit the context manager."""
+        await self._close()
+
+    async def _close(self) -> None:
+        """Close the management interface."""
+        if self.protocol and self.protocol.transport:
+            self.protocol.transport.close()
+            self.protocol = None
+        btmgmt_socket.close(self.sock)
+
+    async def _setup(self) -> None:
+        """Set up management interface."""
+        self.sock = btmgmt_socket.open()
+        loop = asyncio.get_running_loop()
+        protocol_transport = await loop.create_connection(
+            lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT), sock=self.sock
+        )
+        self.protocol = cast(BluetoothMGMTProtocol, protocol_transport[0])
+        await self._find_controller()
+
+    async def _find_controller(self) -> None:
+        """Find the controller."""
+        assert self.protocol is not None  # nosec
+        idxdata = await self.protocol.send("ReadControllerIndexList", None)
         if idxdata.event_frame.status.value != 0x00:  # 0x00 - Success
             _LOGGER.error(
                 "Unable to get hci controllers index list! Event frame status: %s",
@@ -77,7 +158,7 @@ class MGMTBluetoothCtl:
             return
         hci_idx_list = getattr(idxdata.cmd_response_frame, "controller_index[i]")
         for idx in hci_idx_list:
-            hci_info = btmgmt_sync.send("ReadControllerInformation", idx)
+            hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug(hci_info)
             # bit 9 == LE capability (https://github.com/bluez/bluez/blob/master/doc/mgmt-api.txt)
             bt_le = bool(
@@ -91,44 +172,45 @@ class MGMTBluetoothCtl:
                 )
                 continue
             self.presented_list[idx] = hci_info.cmd_response_frame.address
-            if hci == idx:
+            if self._hci == idx:
                 self.idx = idx
                 self.mac = hci_info.cmd_response_frame.address
 
-    def get_powered(self) -> bool | None:
+    async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
+        assert self.protocol is not None  # nosec
         if self.idx is not None:
-            response = btmgmt_sync.send("ReadControllerInformation", self.idx)
+            response = await self.protocol.send("ReadControllerInformation", self.idx)
             return response.cmd_response_frame.current_settings.get(
                 btmgmt_protocol.SupportedSettings.Powered
             )
         return None
 
-    def set_powered(self, new_state: bool) -> bool:
+    async def set_powered(self, new_state: bool) -> bool:
         """Set the powered state of the interface."""
-        response = btmgmt_sync.send("SetPowered", self.idx, int(new_state is True))
+        assert self.protocol is not None  # nosec
+        response = await self.protocol.send(
+            "SetPowered", self.idx, int(new_state is True)
+        )
         if response.event_frame.status.value == 0x00:  # 0x00 - Success
             return True
         return False
 
-
-async def _wait_for_power_state(
-    loop: asyncio.AbstractEventLoop,
-    adapter: MGMTBluetoothCtl,
-    new_state: bool,
-    timeout: float,
-) -> bool | None:
-    """Wait for the adapter to be powered on or off."""
-    current_state: bool | None = not new_state
-    try:
-        async with async_timeout.timeout(timeout):
-            while True:
-                current_state = await loop.run_in_executor(None, adapter.get_powered)
-                if current_state == new_state:
-                    return current_state
-                await asyncio.sleep(0.1)
-    except asyncio.TimeoutError:
-        return current_state
+    async def wait_for_power_state(
+        self, new_state: bool, timeout: float
+    ) -> bool | None:
+        """Wait for the adapter to be powered on or off."""
+        assert self.protocol is not None  # nosec
+        current_state: bool | None = not new_state
+        try:
+            async with async_timeout.timeout(timeout):
+                while True:
+                    current_state = await self.get_powered()
+                    if current_state == new_state:
+                        return current_state
+                    await asyncio.sleep(0.1)
+        except asyncio.TimeoutError:
+            return current_state
 
 
 async def _reset_bluetooth(hci: int) -> bool:
@@ -147,13 +229,18 @@ async def _reset_bluetooth(hci: int) -> bool:
         return False
 
     try:
-        adapter: MGMTBluetoothCtl = await loop.run_in_executor(
-            None, MGMTBluetoothCtl, hci
-        )
+        async with MGMTBluetoothCtl(hci) as adapter:
+            return await _execute_reset(adapter, hci)
     except OSError as ex:
         _LOGGER.warning("Bluetooth adapter hci%i could not be checked: %s", hci, ex)
         return False
+    except asyncio.TimeoutError:
+        _LOGGER.warning("Bluetooth adapter hci%i could not be reset: Timeout", hci)
+        return False
 
+
+async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
+    """Execute the reset."""
     if adapter.mac is None:
         _LOGGER.error(
             "hci%i seems not to exist (anymore), check BT interface mac address in your settings; "
@@ -164,7 +251,7 @@ async def _reset_bluetooth(hci: int) -> bool:
         return False
 
     try:
-        pstate_before = await loop.run_in_executor(None, adapter.get_powered)
+        pstate_before = await adapter.get_powered()
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not determine the power state of the Bluetooth adapter hci%i: %s",
@@ -176,13 +263,13 @@ async def _reset_bluetooth(hci: int) -> bool:
     if pstate_before is True:
         _LOGGER.debug("Current power state of bluetooth adapter is ON.")
         try:
-            loop.run_in_executor(None, adapter.set_powered, False)
+            await adapter.set_powered(False)
         except AttributeError as ex:
             _LOGGER.warning(
                 "Could not power cycle the Bluetooth adapter hci%i: %s", hci, ex
             )
             return False
-        await _wait_for_power_state(loop, adapter, False, POWER_OFF_TIME)
+        await adapter.wait_for_power_state(False, POWER_OFF_TIME)
     elif pstate_before is False:
         _LOGGER.debug(
             "Current power state of bluetooth adapter hci%i is OFF, trying to turn it back ON",
@@ -193,7 +280,7 @@ async def _reset_bluetooth(hci: int) -> bool:
         return False
 
     try:
-        loop.run_in_executor(None, adapter.set_powered, True)
+        await adapter.set_powered(True)
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not re-enable power after cycle of the Bluetooth adapter hci%i: %s",
@@ -202,7 +289,7 @@ async def _reset_bluetooth(hci: int) -> bool:
         )
         return False
 
-    pstate_after = await _wait_for_power_state(loop, adapter, True, POWER_ON_TIME)
+    pstate_after = await adapter.wait_for_power_state(True, POWER_ON_TIME)
 
     # Check the state after the reset
     if pstate_after is True:
