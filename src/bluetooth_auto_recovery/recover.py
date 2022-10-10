@@ -15,7 +15,7 @@ _LOGGER = logging.getLogger(__name__)
 
 POWER_OFF_TIME = 2
 POWER_ON_TIME = 3
-MAX_RESET_TIME = 10
+MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 1.0
 
 MGMT_PROTOCOL_TIMEOUT = 5
@@ -101,11 +101,12 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 class MGMTBluetoothCtl:
     """Class to control interfaces using the BlueZ management API"""
 
-    def __init__(self, hci: int) -> None:
+    def __init__(self, hci: int, timeout: float) -> None:
         """Initialize the control class."""
         self.idx: int | None = None
         self.mac: str | None = None
         self._hci = hci
+        self.timeout = timeout
         self.protocol: BluetoothMGMTProtocol | None = None
         self.presented_list: dict[int, str] = {}
         self.sock: socket.socket | None = None
@@ -139,9 +140,9 @@ class MGMTBluetoothCtl:
             async with async_timeout.timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
-                transport, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
+                _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
                     self.sock,
-                    lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT),
+                    lambda: BluetoothMGMTProtocol(self.timeout),
                     None,
                     None,
                 )
@@ -223,14 +224,18 @@ class MGMTBluetoothCtl:
             return current_state
 
 
-async def _reset_bluetooth(hci: int) -> bool:
-    """Resetting the Bluetooth adapter."""
+async def recover_adapter(hci: int) -> bool:
+    """Reset the bluetooth adapter."""
     _LOGGER.debug("Power cycling Bluetooth adapter hci%i", hci)
     loop = asyncio.get_running_loop()
+    try:
+        async with async_timeout.timeout(MAX_RFKILL_TIME):
+            soft_block, hard_block = await loop.run_in_executor(
+                None, rfkill_list_bluetooth, hci
+            )
+    except asyncio.TimeoutError:
+        _LOGGER.warning("Checking rfkill for hci%i timed out!", hci, MAX_RFKILL_TIME)
 
-    soft_block, hard_block = await loop.run_in_executor(
-        None, rfkill_list_bluetooth, hci
-    )
     if soft_block is True:
         _LOGGER.warning("Bluetooth adapter hci%i is soft blocked by rfkill!", hci)
         return False
@@ -239,13 +244,15 @@ async def _reset_bluetooth(hci: int) -> bool:
         return False
 
     try:
-        async with MGMTBluetoothCtl(hci) as adapter:
+        async with MGMTBluetoothCtl(hci, MGMT_PROTOCOL_TIMEOUT) as adapter:
             return await _execute_reset(adapter, hci)
     except OSError as ex:
         _LOGGER.warning("Bluetooth adapter hci%i could not be checked: %s", hci, ex)
         return False
     except asyncio.TimeoutError:
-        _LOGGER.warning("Bluetooth adapter hci%i could not be reset: Timeout", hci)
+        _LOGGER.warning(
+            "Bluetooth adapter hci%i could not be reset due to timeout", hci
+        )
         return False
 
 
@@ -323,14 +330,4 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
         "Power state of bluetooth adapter hci%i  could not be determined after power cycle",
         hci,
     )
-    return False
-
-
-async def recover_adapter(hci: int) -> bool:
-    """Reset the bluetooth adapter."""
-    try:
-        async with async_timeout.timeout(MAX_RESET_TIME):
-            return await _reset_bluetooth(hci)
-    except asyncio.TimeoutError:
-        _LOGGER.warning("Reset of hci%i timed out after %s!", hci, MAX_RESET_TIME)
     return False
