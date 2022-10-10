@@ -139,7 +139,7 @@ class MGMTBluetoothCtl:
             async with async_timeout.timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
-                protocol, transport = await loop._create_connection_transport(  # type: ignore[attr-defined]
+                transport, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
                     self.sock,
                     lambda: BluetoothMGMTProtocol(MGMT_PROTOCOL_TIMEOUT),
                     None,
