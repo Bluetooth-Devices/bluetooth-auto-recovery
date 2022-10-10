@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.4 (2022-10-10)
+### Fix
+* Ensure management socket is closed on failure to prevent a leak ([#12](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/12)) ([`4ab673f`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/4ab673fb989ae696327150337a4dfd4d1770ca9d))
+
 ## v0.3.3 (2022-09-11)
 ### Fix
 * Downgrade rfkill check logging to debug ([#11](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/11)) ([`80471e6`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/80471e6155d9d72a2ffa467d580aec4315968aaf))
