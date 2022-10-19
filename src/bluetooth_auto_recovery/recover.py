@@ -239,13 +239,13 @@ async def recover_adapter(hci: int) -> bool:
             hci,
             MAX_RFKILL_TIME,
         )
-
-    if soft_block is True:
-        _LOGGER.warning("Bluetooth adapter hci%i is soft blocked by rfkill!", hci)
-        return False
-    if hard_block is True:
-        _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
-        return False
+    else:
+        if soft_block is True:
+            _LOGGER.warning("Bluetooth adapter hci%i is soft blocked by rfkill!", hci)
+            return False
+        if hard_block is True:
+            _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
+            return False
 
     try:
         async with MGMTBluetoothCtl(hci, MGMT_PROTOCOL_TIMEOUT) as adapter:
