@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.6 (2022-10-19)
+### Fix
+* Soft_block and hard_block were unbound when rfkill fails ([#15](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/15)) ([`9d2aa1a`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/9d2aa1a5245ceef07ecb0f1cbdf668782ff5ec81))
+
 ## v0.3.5 (2022-10-19)
 ### Fix
 * Missing param in format string for rfkill timeout message ([#13](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/13)) ([`0022d8a`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/0022d8a28849f51abdc055e6cc1b3c19cbe6abdf))
