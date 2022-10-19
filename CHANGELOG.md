@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.3.5 (2022-10-19)
+### Fix
+* Missing param in format string for rfkill timeout message ([#13](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/13)) ([`0022d8a`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/0022d8a28849f51abdc055e6cc1b3c19cbe6abdf))
+
 ## v0.3.4 (2022-10-10)
 ### Fix
 * Ensure management socket is closed on failure to prevent a leak ([#12](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/12)) ([`4ab673f`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/4ab673fb989ae696327150337a4dfd4d1770ca9d))
