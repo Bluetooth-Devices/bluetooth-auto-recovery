@@ -234,7 +234,11 @@ async def recover_adapter(hci: int) -> bool:
                 None, rfkill_list_bluetooth, hci
             )
     except asyncio.TimeoutError:
-        _LOGGER.warning("Checking rfkill for hci%i timed out!", hci, MAX_RFKILL_TIME)
+        _LOGGER.warning(
+            "Checking rfkill for hci%i timed out after %s seconds!",
+            hci,
+            MAX_RFKILL_TIME,
+        )
 
     if soft_block is True:
         _LOGGER.warning("Bluetooth adapter hci%i is soft blocked by rfkill!", hci)
