@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.4.0 (2022-11-16)
+### Feature
+* Reduce overhead to find a response ([#18](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/18)) ([`219d3f7`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/219d3f77d20415c22412872a24896adee8eefb8e))
+
 ## v0.3.6 (2022-10-19)
 ### Fix
 * Soft_block and hard_block were unbound when rfkill fails ([#15](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/15)) ([`9d2aa1a`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/9d2aa1a5245ceef07ecb0f1cbdf668782ff5ec81))
