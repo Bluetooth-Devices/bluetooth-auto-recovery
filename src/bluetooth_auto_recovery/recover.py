@@ -74,8 +74,12 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 
     def data_received(self, data: bytes) -> None:
         """Handle data received."""
-        response = btmgmt_protocol.reader(data)
-        if response.cmd_response_frame and self.future and not self.future.done():
+        if (
+            self.future
+            and not self.future.done()
+            and (response := btmgmt_protocol.reader(data))
+            and response.cmd_response_frame
+        ):
             self.future.set_result(response)
 
     async def send(self, *args: Any) -> btmgmt_protocol.Response:
