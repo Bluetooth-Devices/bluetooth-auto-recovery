@@ -32,7 +32,7 @@ myst-parser = {version = "^0.18", optional = true}
 PyRIC = ">=0.1.6.3"
 btsocket = ">=0.2.0"
 async-timeout = ">=4.0.1"
-usb-devices = ">=0.4.0"
+usb-devices = ">=0.4.1"
 
 [tool.poetry.extras]
 docs = [
