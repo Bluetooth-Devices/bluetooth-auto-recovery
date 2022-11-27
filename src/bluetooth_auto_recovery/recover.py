@@ -10,6 +10,7 @@ from typing import Any, cast
 import async_timeout
 import pyric.utils.rfkill as rfkill
 from btsocket import btmgmt_protocol, btmgmt_socket
+from usb_devices import BluetoothDevice, NotAUSBDeviceError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -251,6 +252,13 @@ async def recover_adapter(hci: int) -> bool:
             _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
             return False
 
+    if await _power_cycle_adapter(hci):
+        return True
+
+    return await _usb_reset_adapter(hci)
+
+
+async def _power_cycle_adapter(hci: int) -> bool:
     try:
         async with MGMTBluetoothCtl(hci, MGMT_PROTOCOL_TIMEOUT) as adapter:
             return await _execute_reset(adapter, hci)
@@ -261,6 +269,23 @@ async def recover_adapter(hci: int) -> bool:
         _LOGGER.warning(
             "Bluetooth adapter hci%i could not be reset due to timeout", hci
         )
+        return False
+
+
+async def _usb_reset_adapter(hci: int) -> bool:
+    """Reset the bluetooth adapter."""
+    _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
+    dev = BluetoothDevice(hci)
+    try:
+        return await dev.async_reset()
+    except NotAUSBDeviceError:
+        _LOGGER.debug("hci%s is not a USB devices while attempting USB reset.", hci)
+        return False
+    except FileNotFoundError:
+        _LOGGER.debug("hci%s not found while attempting USB reset.", hci)
+        return False
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.exception("Unexpected error while attempting USB reset.")
         return False
 
 
