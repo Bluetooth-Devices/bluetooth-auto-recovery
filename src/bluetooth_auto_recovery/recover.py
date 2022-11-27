@@ -252,7 +252,12 @@ async def recover_adapter(hci: int) -> bool:
             _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
             return False
 
-    return await _power_cycle_adapter(hci) or await _usb_reset_adapter(hci)
+    if await _power_cycle_adapter(hci) or await _usb_reset_adapter(hci):
+        # Give Dbus some time to catch up
+        await asyncio.sleep(DBUS_REGISTER_TIME)
+        return True
+
+    return False
 
 
 async def _power_cycle_adapter(hci: int) -> bool:
@@ -350,8 +355,6 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
             _LOGGER.debug(
                 "Power state of bluetooth adapter hci%i is ON after power cycle", hci
             )
-        # Give Dbus some time to catch up
-        await asyncio.sleep(DBUS_REGISTER_TIME)
         return True
 
     if pstate_after is False:
