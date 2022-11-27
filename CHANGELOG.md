@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.2 (2022-11-27)
+### Fix
+* Ensure dbus wait always happens on success case ([#22](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/22)) ([`df8e7e0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/df8e7e0647dd63aa173d8e815b6a5cbfaf40ff41))
+
 ## v0.5.1 (2022-11-27)
 ### Fix
 * Bump usb-devices ([#21](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/21)) ([`06c2d05`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/06c2d05f530965fee9a7ea7d0cf3596ba65bddfe))
