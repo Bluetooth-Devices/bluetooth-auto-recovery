@@ -252,10 +252,7 @@ async def recover_adapter(hci: int) -> bool:
             _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
             return False
 
-    if await _power_cycle_adapter(hci):
-        return True
-
-    return await _usb_reset_adapter(hci)
+    return await _power_cycle_adapter(hci) or await _usb_reset_adapter(hci)
 
 
 async def _power_cycle_adapter(hci: int) -> bool:
