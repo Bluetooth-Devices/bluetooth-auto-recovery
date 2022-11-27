@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.1 (2022-11-27)
+### Fix
+* Bump usb-devices ([#21](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/21)) ([`06c2d05`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/06c2d05f530965fee9a7ea7d0cf3596ba65bddfe))
+
 ## v0.5.0 (2022-11-27)
 ### Feature
 * Implement generic usb reset ([#20](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/20)) ([`0d7f045`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/0d7f045703b192b0aa86de482d128a43f48e84bf))
