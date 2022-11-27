@@ -276,13 +276,13 @@ async def _usb_reset_adapter(hci: int) -> bool:
     try:
         return await dev.async_reset()
     except NotAUSBDeviceError:
-        _LOGGER.debug("hci%s is not a USB devices while attempting USB reset.", hci)
+        _LOGGER.debug("hci%s is not a USB devices while attempting USB reset", hci)
         return False
     except FileNotFoundError:
-        _LOGGER.debug("hci%s not found while attempting USB reset.", hci)
+        _LOGGER.debug("hci%s not found while attempting USB reset", hci)
         return False
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception("Unexpected error while attempting USB reset.")
+        _LOGGER.exception("Unexpected error while attempting USB reset of hci%s", hci)
         return False
 
 
