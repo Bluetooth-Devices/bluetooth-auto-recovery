@@ -48,6 +48,16 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
             ex,
         )
         return None, None
+    except UnicodeDecodeError as ex:
+        _LOGGER.debug(
+            "RF kill switch check failed - data for %s is not UTF-8 encoded: %s",
+            hci_idx,
+            ex,
+        )
+        return None, None
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.exception("RF kill switch check failed")
+        return None, None
     try:
         rfkill_hci_state = rfkill_dict[hci_idx]
     except KeyError:
