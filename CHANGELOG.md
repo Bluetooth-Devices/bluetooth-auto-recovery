@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.3 (2022-11-29)
+### Fix
+* For rfkill not being readable ([#23](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/23)) ([`6c168a0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/6c168a0704401d6dfcd95ade31b2df47cee03060))
+
 ## v0.5.2 (2022-11-27)
 ### Fix
 * Ensure dbus wait always happens on success case ([#22](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/22)) ([`df8e7e0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/df8e7e0647dd63aa173d8e815b6a5cbfaf40ff41))
