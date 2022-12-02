@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.4 (2022-12-02)
+### Fix
+* Downgrade permission denied error logging when attempting usb reset ([#24](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/24)) ([`79cf457`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/79cf457f38071ba8265864c8b18acda184065f97))
+
 ## v0.5.3 (2022-11-29)
 ### Fix
 * For rfkill not being readable ([#23](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/23)) ([`6c168a0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/6c168a0704401d6dfcd95ade31b2df47cee03060))
