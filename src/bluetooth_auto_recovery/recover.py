@@ -298,6 +298,14 @@ async def _usb_reset_adapter(hci: int) -> bool:
     except FileNotFoundError as ex:
         _LOGGER.debug("hci%s not found while attempting USB reset: %s", hci, ex)
         return False
+    except PermissionError as ex:
+        _LOGGER.info(
+            "hci%s permission denied to %s while attempting USB reset: %s",
+            hci,
+            ex.filename,
+            ex,
+        )
+        return False
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception(
             "Unexpected error while attempting USB reset of hci%s: %s", hci, ex
