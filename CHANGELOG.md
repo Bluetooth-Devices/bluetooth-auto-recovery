@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v0.5.5 (2022-12-09)
+### Fix
+* Handle BluetoothSocketError and fallback to usb reset ([#25](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/25)) ([`5d6d1c3`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/5d6d1c390279fbe712f6330f8997dc87f981d5e7))
+
 ## v0.5.4 (2022-12-02)
 ### Fix
 * Downgrade permission denied error logging when attempting usb reset ([#24](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/24)) ([`79cf457`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/79cf457f38071ba8265864c8b18acda184065f97))
