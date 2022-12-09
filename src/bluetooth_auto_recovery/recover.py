@@ -274,8 +274,16 @@ async def _power_cycle_adapter(hci: int) -> bool:
     try:
         async with MGMTBluetoothCtl(hci, MGMT_PROTOCOL_TIMEOUT) as adapter:
             return await _execute_reset(adapter, hci)
+    except btmgmt_socket.BluetoothSocketError as ex:
+        _LOGGER.warning(
+            "Bluetooth adapter hci%i could not be reset "
+            "because the system cannot create a bluetooth socket: %s",
+            hci,
+            ex,
+        )
+        return False
     except OSError as ex:
-        _LOGGER.warning("Bluetooth adapter hci%i could not be checked: %s", hci, ex)
+        _LOGGER.warning("Bluetooth adapter hci%i could not be reset: %s", hci, ex)
         return False
     except asyncio.TimeoutError:
         _LOGGER.warning(
