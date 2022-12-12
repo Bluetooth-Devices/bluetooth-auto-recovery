@@ -313,6 +313,15 @@ async def _usb_reset_adapter(hci: int) -> bool:
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
     name = f"hci{adapter.hci} [{adapter.mac}]"
+    if adapter.idx is None:
+        _LOGGER.error(
+            "%s seems not to exist (anymore), check BT interface mac address in your settings; "
+            "Available adapters: %s ",
+            name,
+            adapter.presented_list,
+        )
+        return False
+
     try:
         pstate_before = await adapter.get_powered()
     except AttributeError as ex:
