@@ -189,7 +189,15 @@ class MGMTBluetoothCtl:
             self.presented_list[idx] = mac
             if self.mac == mac:
                 self.idx = idx
-                break
+                return
+        if not self.idx and self.hci in self.presented_list:
+            _LOGGER.warning(
+                "The mac address %s was not found in the adapter list, "
+                "falling back to matching by hci%i",
+                self.mac,
+                self.hci,
+            )
+            self.idx = self.hci
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
