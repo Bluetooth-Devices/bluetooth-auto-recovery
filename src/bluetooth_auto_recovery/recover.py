@@ -392,7 +392,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         return False
 
     _LOGGER.debug(
-        "Power state of bluetooth adapter %s  could not be determined after power cycle",
+        "Power state of bluetooth adapter %s could not be determined after power cycle",
         name,
     )
     return False
