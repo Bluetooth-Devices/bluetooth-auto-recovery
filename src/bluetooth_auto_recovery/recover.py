@@ -192,9 +192,10 @@ class MGMTBluetoothCtl:
                 return
         if not self.idx and self.hci in self.presented_list:
             _LOGGER.warning(
-                "The mac address %s was not found in the adapter list, "
+                "The mac address %s was not found in the adapter list: %s, "
                 "falling back to matching by hci%i",
                 self.mac,
+                self.presented_list,
                 self.hci,
             )
             self.idx = self.hci
