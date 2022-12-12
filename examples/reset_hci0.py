@@ -8,7 +8,7 @@ logging.getLogger("bluetooth_auto_recovery").setLevel(logging.DEBUG)
 
 
 async def run() -> None:
-    await recover_adapter(0, "aa:bb:cc:dd:ee:ff")
+    await recover_adapter(0, "00:1a:7d:da:71:13")
 
 
 asyncio.run(run())

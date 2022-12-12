@@ -239,7 +239,10 @@ class MGMTBluetoothCtl:
 
 async def recover_adapter(hci: int, mac: str) -> bool:
     """Reset the bluetooth adapter."""
-    _LOGGER.debug("Power cycling Bluetooth adapter hci%i", hci)
+    mac = mac.upper()
+    _LOGGER.debug(
+        "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
+    )
     loop = asyncio.get_running_loop()
     try:
         async with async_timeout.timeout(MAX_RFKILL_TIME):
@@ -269,24 +272,24 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
 
 async def _power_cycle_adapter(hci: int, mac: str) -> bool:
+    name = f"hci{hci} [{mac}]"
+    _LOGGER.debug("Attempting to power cycle bluetooth adapter %ss", name)
     try:
         async with MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT) as adapter:
             return await _execute_reset(adapter)
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
-            "Bluetooth adapter hci%i could not be reset "
+            "Bluetooth adapter %s could not be reset "
             "because the system cannot create a bluetooth socket: %s",
-            hci,
+            name,
             ex,
         )
         return False
     except OSError as ex:
-        _LOGGER.warning("Bluetooth adapter hci%i could not be reset: %s", hci, ex)
+        _LOGGER.warning("Bluetooth adapter %s could not be reset: %s", name, ex)
         return False
     except asyncio.TimeoutError:
-        _LOGGER.warning(
-            "Bluetooth adapter hci%i could not be reset due to timeout", hci
-        )
+        _LOGGER.warning("Bluetooth adapter %s could not be reset due to timeout", name)
         return False
 
 
