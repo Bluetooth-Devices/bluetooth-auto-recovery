@@ -185,17 +185,6 @@ class MGMTBluetoothCtl:
         for idx in hci_idx_list:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug(hci_info)
-            # bit 9 == LE capability (https://github.com/bluez/bluez/blob/master/doc/mgmt-api.txt)
-            bt_le = bool(
-                hci_info.cmd_response_frame.supported_settings & 0b000000001000000000
-            )
-            if bt_le is not True:
-                _LOGGER.warning(
-                    "hci%i (%s) have no BT LE capabilities and will be ignored.",
-                    idx,
-                    hci_info.cmd_response_frame.address,
-                )
-                continue
             self.presented_list[idx] = hci_info.cmd_response_frame.address
             if self._hci == idx:
                 self.idx = idx
