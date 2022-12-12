@@ -1,4 +1,4 @@
-__version__ = "0.5.5"
+__version__ = "1.0.0"
 
 from .recover import recover_adapter
 
