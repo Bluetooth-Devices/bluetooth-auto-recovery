@@ -116,11 +116,11 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 class MGMTBluetoothCtl:
     """Class to control interfaces using the BlueZ management API"""
 
-    def __init__(self, hci: int, timeout: float) -> None:
+    def __init__(self, hci: int, mac: str, timeout: float) -> None:
         """Initialize the control class."""
         self.idx: int | None = None
-        self.mac: str | None = None
-        self._hci = hci
+        self.mac = mac
+        self.hci = hci
         self.timeout = timeout
         self.protocol: BluetoothMGMTProtocol | None = None
         self.presented_list: dict[int, str] = {}
@@ -185,22 +185,20 @@ class MGMTBluetoothCtl:
         for idx in hci_idx_list:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug(hci_info)
-            # bit 9 == LE capability (https://github.com/bluez/bluez/blob/master/doc/mgmt-api.txt)
-            bt_le = bool(
-                hci_info.cmd_response_frame.supported_settings & 0b000000001000000000
-            )
-            if bt_le is not True:
-                _LOGGER.warning(
-                    "hci%i (%s) have no BT LE capabilities and will be ignored.",
-                    idx,
-                    hci_info.cmd_response_frame.address,
-                )
-                continue
-            self.presented_list[idx] = hci_info.cmd_response_frame.address
-            if self._hci == idx:
+            mac = hci_info.cmd_response_frame.address
+            self.presented_list[idx] = mac
+            if self.mac == mac:
                 self.idx = idx
-                self.mac = hci_info.cmd_response_frame.address
-                break
+                return
+        if not self.idx and self.hci in self.presented_list:
+            _LOGGER.warning(
+                "The mac address %s was not found in the adapter list: %s, "
+                "falling back to matching by hci%i",
+                self.mac,
+                self.presented_list,
+                self.hci,
+            )
+            self.idx = self.hci
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
@@ -239,9 +237,12 @@ class MGMTBluetoothCtl:
             return current_state
 
 
-async def recover_adapter(hci: int) -> bool:
+async def recover_adapter(hci: int, mac: str) -> bool:
     """Reset the bluetooth adapter."""
-    _LOGGER.debug("Power cycling Bluetooth adapter hci%i", hci)
+    mac = mac.upper()
+    _LOGGER.debug(
+        "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
+    )
     loop = asyncio.get_running_loop()
     try:
         async with async_timeout.timeout(MAX_RFKILL_TIME):
@@ -262,7 +263,7 @@ async def recover_adapter(hci: int) -> bool:
             _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
             return False
 
-    if await _power_cycle_adapter(hci) or await _usb_reset_adapter(hci):
+    if await _power_cycle_adapter(hci, mac) or await _usb_reset_adapter(hci):
         # Give Dbus some time to catch up
         await asyncio.sleep(DBUS_REGISTER_TIME)
         return True
@@ -270,25 +271,25 @@ async def recover_adapter(hci: int) -> bool:
     return False
 
 
-async def _power_cycle_adapter(hci: int) -> bool:
+async def _power_cycle_adapter(hci: int, mac: str) -> bool:
+    name = f"hci{hci} [{mac}]"
+    _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
     try:
-        async with MGMTBluetoothCtl(hci, MGMT_PROTOCOL_TIMEOUT) as adapter:
-            return await _execute_reset(adapter, hci)
+        async with MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT) as adapter:
+            return await _execute_reset(adapter)
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
-            "Bluetooth adapter hci%i could not be reset "
+            "Bluetooth adapter %s could not be reset "
             "because the system cannot create a bluetooth socket: %s",
-            hci,
+            name,
             ex,
         )
         return False
     except OSError as ex:
-        _LOGGER.warning("Bluetooth adapter hci%i could not be reset: %s", hci, ex)
+        _LOGGER.warning("Bluetooth adapter %s could not be reset: %s", name, ex)
         return False
     except asyncio.TimeoutError:
-        _LOGGER.warning(
-            "Bluetooth adapter hci%i could not be reset due to timeout", hci
-        )
+        _LOGGER.warning("Bluetooth adapter %s could not be reset due to timeout", name)
         return False
 
 
@@ -321,13 +322,14 @@ async def _usb_reset_adapter(hci: int) -> bool:
         return False
 
 
-async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
+async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
-    if adapter.mac is None:
+    name = f"hci{adapter.hci} [{adapter.mac}]"
+    if adapter.idx is None:
         _LOGGER.error(
-            "hci%i seems not to exist (anymore), check BT interface mac address in your settings; "
+            "%s seems not to exist (anymore), check BT interface mac address in your settings; "
             "Available adapters: %s ",
-            hci,
+            name,
             adapter.presented_list,
         )
         return False
@@ -336,8 +338,8 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
         pstate_before = await adapter.get_powered()
     except AttributeError as ex:
         _LOGGER.warning(
-            "Could not determine the power state of the Bluetooth adapter hci%i: %s",
-            hci,
+            "Could not determine the power state of the Bluetooth adapter %s: %s",
+            name,
             ex,
         )
         return False
@@ -348,14 +350,14 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
             await adapter.set_powered(False)
         except AttributeError as ex:
             _LOGGER.warning(
-                "Could not power cycle the Bluetooth adapter hci%i: %s", hci, ex
+                "Could not power cycle the Bluetooth adapter %s: %s", name, ex
             )
             return False
         await adapter.wait_for_power_state(False, POWER_OFF_TIME)
     elif pstate_before is False:
         _LOGGER.debug(
-            "Current power state of bluetooth adapter hci%i is OFF, trying to turn it back ON",
-            hci,
+            "Current power state of bluetooth adapter %s is OFF, trying to turn it back ON",
+            name,
         )
     else:
         _LOGGER.debug("Power state of bluetooth adapter could not be determined")
@@ -365,8 +367,8 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
         await adapter.set_powered(True)
     except AttributeError as ex:
         _LOGGER.warning(
-            "Could not re-enable power after cycle of the Bluetooth adapter hci%i: %s",
-            hci,
+            "Could not re-enable power after cycle of the Bluetooth adapter %s: %s",
+            name,
             ex,
         )
         return False
@@ -376,21 +378,21 @@ async def _execute_reset(adapter: MGMTBluetoothCtl, hci: int) -> bool:
     # Check the state after the reset
     if pstate_after is True:
         if pstate_before is False:
-            _LOGGER.warning("Bluetooth adapter hci%i successfully turned back ON", hci)
+            _LOGGER.warning("Bluetooth adapter %s successfully turned back ON", name)
         else:
             _LOGGER.debug(
-                "Power state of bluetooth adapter hci%i is ON after power cycle", hci
+                "Power state of bluetooth adapter %s is ON after power cycle", name
             )
         return True
 
     if pstate_after is False:
         _LOGGER.warning(
-            "Power state of bluetooth adapter hci%i is OFF after power cycle", hci
+            "Power state of bluetooth adapter %s is OFF after power cycle", name
         )
         return False
 
     _LOGGER.debug(
-        "Power state of bluetooth adapter hci%i  could not be determined after power cycle",
-        hci,
+        "Power state of bluetooth adapter %s could not be determined after power cycle",
+        name,
     )
     return False
