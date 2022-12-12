@@ -273,7 +273,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
 async def _power_cycle_adapter(hci: int, mac: str) -> bool:
     name = f"hci{hci} [{mac}]"
-    _LOGGER.debug("Attempting to power cycle bluetooth adapter %ss", name)
+    _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
     try:
         async with MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT) as adapter:
             return await _execute_reset(adapter)
