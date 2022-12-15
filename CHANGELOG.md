@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.0.1 (2022-12-15)
+### Fix
+* Handle adapter moving to a new hci number after reset ([#27](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/27)) ([`662f710`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/662f710c30b07a0904cc9a3d00b39303ee43db4a))
+
 ## v1.0.0 (2022-12-12)
 ### Feature
 * Add support for being able to reset the adapter by mac address when the hci interface is lost ([#26](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/26)) ([`72d6114`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/72d6114a4c6b553fb574f43fc793fd0c7a969521))
