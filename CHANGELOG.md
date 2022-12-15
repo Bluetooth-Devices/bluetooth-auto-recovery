@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.0.2 (2022-12-15)
+### Fix
+* Handle the case where a btsocket cannot be created ([#28](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/28)) ([`6e8e8e1`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/6e8e8e1b0b42a0c830a70cafafd8a25e3df631d5))
+
 ## v1.0.1 (2022-12-15)
 ### Fix
 * Handle adapter moving to a new hci number after reset ([#27](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/27)) ([`662f710`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/662f710c30b07a0904cc9a3d00b39303ee43db4a))
