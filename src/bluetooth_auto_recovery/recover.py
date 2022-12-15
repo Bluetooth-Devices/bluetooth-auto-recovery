@@ -341,35 +341,36 @@ async def recover_adapter(hci: int, mac: str) -> bool:
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
 
-        usb_reset = await _usb_reset_adapter(hci)
+        if not await _usb_reset_adapter(hci):
+            return False
 
-    if usb_reset:
-        # We just did a USB reset which may cause the adapter
-        # to move to a different hci number. Try to find it again.
-        async with _get_adapter(hci, mac) as adapter:
-            if not adapter:
-                _LOGGER.warning(
-                    "Could not find adapter with mac address %s or hci%i", mac, hci
-                )
-                return False
+        # Give Dbus some time to catch up
+        await asyncio.sleep(DBUS_REGISTER_TIME)
 
-            if adapter and adapter.idx and adapter.idx != hci:
-                hci = adapter.idx
-                _LOGGER.warning(
-                    "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
-                )
+    # We just did a USB reset which may cause the adapter
+    # to move to a different hci number. Try to find it again.
+    async with _get_adapter(hci, mac) as adapter:
+        if not adapter:
+            _LOGGER.warning(
+                "Could not find adapter with mac address %s or hci%i", mac, hci
+            )
+            return False
 
-            # After the reset, rfkill may be blocked so we need
-            # to check and unblock it.
-            if not await _check_or_unblock_rfkill(hci):
-                _LOGGER.warning(
-                    "rfkill has blocked hci%i, and could not be unblocked", hci
-                )
-                return False
+        if adapter and adapter.idx and adapter.idx != hci:
+            hci = adapter.idx
+            _LOGGER.warning(
+                "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
+            )
 
-        return True
+        # After the reset, rfkill may be blocked so we need
+        # to check and unblock it.
+        if not await _check_or_unblock_rfkill(hci):
+            _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
+            return False
 
-    return False
+    # Give Dbus some time to catch up
+    await asyncio.sleep(DBUS_REGISTER_TIME)
+    return True
 
 
 @asynccontextmanager
