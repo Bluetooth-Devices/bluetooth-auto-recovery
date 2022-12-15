@@ -415,7 +415,10 @@ async def _get_adapter(hci: int, mac: str) -> AsyncIterator[MGMTBluetoothCtl | N
         yield None
     finally:
         if adapter:
-            await adapter.close()
+            try:
+                await adapter.close()
+            except Exception as ex:  # pylint: disable=broad-except
+                _LOGGER.warning("Closing Bluetooth adapter %s failed: %s", name, ex)
 
 
 async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
