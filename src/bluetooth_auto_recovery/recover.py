@@ -4,8 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-from types import TracebackType
-from typing import Any, cast
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, cast
 
 import async_timeout
 import pyric.utils.rfkill as rfkill
@@ -138,28 +138,14 @@ class MGMTBluetoothCtl:
         self.presented_list: dict[int, str] = {}
         self.sock: socket.socket | None = None
 
-    async def __aenter__(self) -> MGMTBluetoothCtl:
-        """Enter the context manager."""
-        await self._setup()
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Exit the context manager."""
-        await self._close()
-
-    async def _close(self) -> None:
+    async def close(self) -> None:
         """Close the management interface."""
         if self.protocol and self.protocol.transport:
             self.protocol.transport.close()
             self.protocol = None
         btmgmt_socket.close(self.sock)
 
-    async def _setup(self) -> None:
+    async def setup(self) -> None:
         """Set up management interface."""
         self.sock = btmgmt_socket.open()
         loop = asyncio.get_running_loop()
@@ -323,24 +309,68 @@ async def recover_adapter(hci: int, mac: str) -> bool:
     _LOGGER.debug(
         "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
     )
-    if not await _check_or_unblock_rfkill(hci):
-        _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
+    async with _get_adapter(hci, mac) as adapter:
+        if not adapter:
+            _LOGGER.warning(
+                "Could not find adapter with mac address %s or hci%i", mac, hci
+            )
+            return False
 
-    if await _power_cycle_adapter(hci, mac) or await _usb_reset_adapter(hci):
-        # Give Dbus some time to catch up
-        await asyncio.sleep(DBUS_REGISTER_TIME)
-        return True
+        if adapter and adapter.idx and adapter.idx != hci:
+            hci = adapter.idx
+            _LOGGER.warning(
+                "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
+            )
+
+        if not await _check_or_unblock_rfkill(hci):
+            _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
+
+        if adapter and await _power_cycle_adapter(adapter):
+            # Give Dbus some time to catch up
+            await asyncio.sleep(DBUS_REGISTER_TIME)
+            return True
+
+        if await _usb_reset_adapter(hci):
+            # Give Dbus some time to catch up
+            await asyncio.sleep(DBUS_REGISTER_TIME)
+            return True
 
     return False
 
 
-async def _power_cycle_adapter(hci: int, mac: str) -> bool:
+@asynccontextmanager
+async def _get_adapter(hci: int, mac: str) -> AsyncIterator[MGMTBluetoothCtl | None]:
+    """Get the adapter."""
     name = f"hci{hci} [{mac}]"
     _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
     try:
-        async with MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT) as adapter:
-            _LOGGER.debug("hci%i (%s) idx is %s", hci, mac, adapter.idx)
-            return await _execute_reset(adapter)
+        adapter = MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT)
+        await adapter.setup()
+        _LOGGER.debug("hci%i (%s) idx is %s", hci, mac, adapter.idx)
+        yield adapter
+    except btmgmt_socket.BluetoothSocketError as ex:
+        _LOGGER.warning(
+            "Getting Bluetooth adapter failed %s "
+            "because the system cannot create a bluetooth socket: %s",
+            name,
+            ex,
+        )
+        yield None
+    except OSError as ex:
+        _LOGGER.warning("Getting Bluetooth adapter %s failed: %s", name, ex)
+        yield None
+    except asyncio.TimeoutError:
+        _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
+        yield None
+    finally:
+        await adapter.close()
+
+
+async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
+    name = f"hci{adapter.idx} [{adapter.mac}]"
+    _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
+    try:
+        return await _execute_reset(adapter)
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
             "Bluetooth adapter %s could not be reset "
