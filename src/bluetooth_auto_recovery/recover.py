@@ -22,7 +22,18 @@ DBUS_REGISTER_TIME = 1.0
 MGMT_PROTOCOL_TIMEOUT = 5
 
 
-def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
+def rfkill_unblock(hci: int, idx: int) -> bool:
+    """Try to remove an rfkill soft block."""
+    try:
+        rfkill.rfkill_unblock(idx)
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.exception("RF kill switch unblock of hci%i (idx:%s) failed", hci, idx)
+        return False
+
+    return True
+
+
+def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None, int | None]:
     """Execute the rfkill list bluetooth command."""
     hci_idx = f"hci{hci}"
     try:
@@ -33,31 +44,31 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
             hci_idx,
             ex,
         )
-        return None, None
+        return None, None, None
     except IndexError as ex:
         _LOGGER.debug(
             "rfkill at /dev/rfkill returned unexpected results, cannot check bluetooth adapter %s: %s",
             hci_idx,
             ex,
         )
-        return None, None
+        return None, None, None
     except PermissionError as ex:
         _LOGGER.debug(
             "Access to rfkill at /dev/rfkill is not permitted, cannot check bluetooth adapter %s: %s",
             hci_idx,
             ex,
         )
-        return None, None
+        return None, None, None
     except UnicodeDecodeError as ex:
         _LOGGER.debug(
             "RF kill switch check failed - data for %s is not UTF-8 encoded: %s",
             hci_idx,
             ex,
         )
-        return None, None
+        return None, None, None
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception("RF kill switch check failed")
-        return None, None
+        return None, None, None
     try:
         rfkill_hci_state = rfkill_dict[hci_idx]
     except KeyError:
@@ -66,8 +77,9 @@ def rfkill_list_bluetooth(hci: int) -> tuple[bool | None, bool | None]:
             hci_idx,
             rfkill_dict,
         )
-        return None, None
-    return rfkill_hci_state["soft"], rfkill_hci_state["hard"]
+        return None, None, None
+
+    return rfkill_hci_state["soft"], rfkill_hci_state["hard"], rfkill_hci_state["idx"]
 
 
 class BluetoothMGMTProtocol(asyncio.Protocol):
@@ -237,31 +249,82 @@ class MGMTBluetoothCtl:
             return current_state
 
 
-async def recover_adapter(hci: int, mac: str) -> bool:
-    """Reset the bluetooth adapter."""
-    mac = mac.upper()
-    _LOGGER.debug(
-        "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
-    )
+async def _check_rfkill(hci: int) -> tuple[bool | None, bool | None, int | None]:
+    """Check if rfkill is blocked."""
     loop = asyncio.get_running_loop()
     try:
         async with async_timeout.timeout(MAX_RFKILL_TIME):
-            soft_block, hard_block = await loop.run_in_executor(
-                None, rfkill_list_bluetooth, hci
-            )
+            return await loop.run_in_executor(None, rfkill_list_bluetooth, hci)
     except asyncio.TimeoutError:
         _LOGGER.warning(
             "Checking rfkill for hci%i timed out after %s seconds!",
             hci,
             MAX_RFKILL_TIME,
         )
-    else:
-        if soft_block is True:
-            _LOGGER.warning("Bluetooth adapter hci%i is soft blocked by rfkill!", hci)
-            return False
-        if hard_block is True:
-            _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
-            return False
+
+    return None, None, None
+
+
+async def _unblock_rfkill(hci: int, idx: int) -> bool:
+    """Try to unblock an adapter."""
+    loop = asyncio.get_running_loop()
+    try:
+        async with async_timeout.timeout(MAX_RFKILL_TIME):
+            return await loop.run_in_executor(None, rfkill_unblock, hci, idx)
+    except asyncio.TimeoutError:
+        _LOGGER.warning(
+            "Unblocking rfkill for hci%i with idx:%s timed out after %s seconds!",
+            hci,
+            idx,
+            MAX_RFKILL_TIME,
+        )
+
+    return False
+
+
+async def _check_or_unblock_rfkill(hci: int) -> bool:
+    """Check if rfkill is blocked, and try to unblock if possible.
+
+    Returns False if the adapter is blocked or the state
+    could not be determined.
+    """
+    soft_block, hard_block, hci_idx = await _check_rfkill(hci)
+
+    if hard_block:
+        _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
+        return False
+
+    if not soft_block:
+        return True
+
+    if not hci_idx:
+        _LOGGER.debug("Could not determine idx of hci%i", hci)
+        return True
+
+    _LOGGER.debug(
+        "Bluetooth adapter hci%i is soft blocked by rfkill; trying to unblock", hci
+    )
+    await _unblock_rfkill(hci, hci_idx)
+
+    soft_block, hard_block, hci_idx = await _check_rfkill(hci)
+    if soft_block or hard_block:
+        _LOGGER.warning(
+            "Bluetooth adapter hci%i is blocked by rfkill and could not be unblocked",
+            hci,
+        )
+        return False
+
+    return True
+
+
+async def recover_adapter(hci: int, mac: str) -> bool:
+    """Reset the bluetooth adapter."""
+    mac = mac.upper()
+    _LOGGER.debug(
+        "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
+    )
+    if not await _check_or_unblock_rfkill(hci):
+        _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
 
     if await _power_cycle_adapter(hci, mac) or await _usb_reset_adapter(hci):
         # Give Dbus some time to catch up
