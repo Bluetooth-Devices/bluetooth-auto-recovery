@@ -344,7 +344,8 @@ async def recover_adapter(hci: int, mac: str) -> bool:
         if not await _usb_reset_adapter(hci):
             return False
 
-        # Give Dbus some time to catch up
+        # Give Dbus some time to catch up in case
+        # the adapter is going to move to a new hci number.
         await asyncio.sleep(DBUS_REGISTER_TIME)
 
     # We just did a USB reset which may cause the adapter
