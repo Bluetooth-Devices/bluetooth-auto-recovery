@@ -456,7 +456,7 @@ async def _usb_reset_adapter(hci: int) -> bool:
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
-    name = f"hci{adapter.hci} [{adapter.mac}]"
+    name = f"hci{adapter.idx} [{adapter.mac}]"
     if adapter.idx is None:
         _LOGGER.error(
             "%s seems not to exist (anymore), check BT interface mac address in your settings; "
