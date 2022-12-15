@@ -393,6 +393,7 @@ async def _get_adapter(hci: int, mac: str) -> AsyncIterator[MGMTBluetoothCtl | N
     """Get the adapter."""
     name = f"hci{hci} [{mac}]"
     _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
+    adapter = None
     try:
         adapter = MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT)
         await adapter.setup()
@@ -413,7 +414,8 @@ async def _get_adapter(hci: int, mac: str) -> AsyncIterator[MGMTBluetoothCtl | N
         _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
         yield None
     finally:
-        await adapter.close()
+        if adapter:
+            await adapter.close()
 
 
 async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
