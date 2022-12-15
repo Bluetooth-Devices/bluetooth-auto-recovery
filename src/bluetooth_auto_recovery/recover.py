@@ -308,6 +308,7 @@ async def _check_or_unblock_rfkill(hci: int) -> bool:
         )
         return False
 
+    _LOGGER.debug("Bluetooth adapter hci%i was successfully unblocked", hci)
     return True
 
 
