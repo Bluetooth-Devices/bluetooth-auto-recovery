@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.0.3 (2022-12-15)
+### Fix
+* Handle the btsocket being closed out from under us ([#29](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/29)) ([`1e0d878`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/1e0d87853379e1ca89b50ecd9698e8c61c37e398))
+
 ## v1.0.2 (2022-12-15)
 ### Fix
 * Handle the case where a btsocket cannot be created ([#28](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/28)) ([`6e8e8e1`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/6e8e8e1b0b42a0c830a70cafafd8a25e3df631d5))
