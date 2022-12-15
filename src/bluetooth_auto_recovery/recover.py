@@ -23,17 +23,19 @@ DBUS_REGISTER_TIME = 1.0
 MGMT_PROTOCOL_TIMEOUT = 5
 
 
-def rfkill_unblock(hci: int, idx: int) -> bool:
+def rfkill_unblock(hci: int, rfkill_idx: int) -> bool:
     """Try to remove an rfkill soft block."""
     try:
         with open(rfkill.dpath, "wb") as fout:
             fout.write(
                 rfkh.rfkill_event(
-                    idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0
+                    rfkill_idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0
                 )
             )
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception("RF kill switch unblock of hci%i (idx:%s) failed", hci, idx)
+        _LOGGER.exception(
+            "RF kill switch unblock of hci%i (rfkill_idx:%s) failed", hci, rfkill_idx
+        )
         return False
 
     return True
@@ -257,17 +259,17 @@ async def _check_rfkill(hci: int) -> tuple[bool | None, bool | None, int | None]
     return None, None, None
 
 
-async def _unblock_rfkill(hci: int, idx: int) -> bool:
+async def _unblock_rfkill(hci: int, rfkill_idx: int) -> bool:
     """Try to unblock an adapter."""
     loop = asyncio.get_running_loop()
     try:
         async with async_timeout.timeout(MAX_RFKILL_TIME):
-            return await loop.run_in_executor(None, rfkill_unblock, hci, idx)
+            return await loop.run_in_executor(None, rfkill_unblock, hci, rfkill_idx)
     except asyncio.TimeoutError:
         _LOGGER.warning(
             "Unblocking rfkill for hci%i with idx:%s timed out after %s seconds!",
             hci,
-            idx,
+            rfkill_idx,
             MAX_RFKILL_TIME,
         )
 
@@ -280,7 +282,7 @@ async def _check_or_unblock_rfkill(hci: int) -> bool:
     Returns False if the adapter is blocked or the state
     could not be determined.
     """
-    soft_block, hard_block, hci_idx = await _check_rfkill(hci)
+    soft_block, hard_block, rfkill_idx = await _check_rfkill(hci)
 
     if hard_block:
         _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
@@ -289,16 +291,16 @@ async def _check_or_unblock_rfkill(hci: int) -> bool:
     if not soft_block:
         return True
 
-    if not hci_idx:
-        _LOGGER.debug("Could not determine idx of hci%i", hci)
+    if not rfkill_idx:
+        _LOGGER.debug("Could not determine rfkill_idx of hci%i", hci)
         return True
 
     _LOGGER.debug(
         "Bluetooth adapter hci%i is soft blocked by rfkill; trying to unblock", hci
     )
-    await _unblock_rfkill(hci, hci_idx)
+    await _unblock_rfkill(hci, rfkill_idx)
 
-    soft_block, hard_block, hci_idx = await _check_rfkill(hci)
+    soft_block, hard_block, rfkill_idx = await _check_rfkill(hci)
     if soft_block or hard_block:
         _LOGGER.warning(
             "Bluetooth adapter hci%i is blocked by rfkill and could not be unblocked",
