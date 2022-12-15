@@ -301,6 +301,8 @@ async def _check_or_unblock_rfkill(hci: int) -> bool:
         "Bluetooth adapter hci%i is soft blocked by rfkill; trying to unblock", hci
     )
     await _unblock_rfkill(hci, rfkill_idx)
+    # Give Dbus some time to catch up
+    await asyncio.sleep(DBUS_REGISTER_TIME)
 
     soft_block, hard_block, rfkill_idx = await _check_rfkill(hci)
     if soft_block or hard_block:
