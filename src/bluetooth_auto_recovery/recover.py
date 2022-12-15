@@ -339,6 +339,7 @@ async def _power_cycle_adapter(hci: int, mac: str) -> bool:
     _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
     try:
         async with MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT) as adapter:
+            _LOGGER.debug("hci%i (%s) idx is %s", hci, mac, adapter.idx)
             return await _execute_reset(adapter)
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
