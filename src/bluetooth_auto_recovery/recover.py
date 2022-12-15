@@ -23,18 +23,15 @@ DBUS_REGISTER_TIME = 1.0
 MGMT_PROTOCOL_TIMEOUT = 5
 
 
-def __rfkill_unblock(idx: int) -> None:
-    """Unblock an rfkill device."""
-    with open(rfkill.dpath, "wb") as fout:
-        fout.write(
-            rfkh.rfkill_event(idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0)
-        )
-
-
 def rfkill_unblock(hci: int, idx: int) -> bool:
     """Try to remove an rfkill soft block."""
     try:
-        __rfkill_unblock(idx)
+        with open(rfkill.dpath, "wb") as fout:
+            fout.write(
+                rfkh.rfkill_event(
+                    idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0
+                )
+            )
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception("RF kill switch unblock of hci%i (idx:%s) failed", hci, idx)
         return False
