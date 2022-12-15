@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, cast
 
 import async_timeout
+import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
 from btsocket import btmgmt_protocol, btmgmt_socket
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
@@ -22,10 +23,18 @@ DBUS_REGISTER_TIME = 1.0
 MGMT_PROTOCOL_TIMEOUT = 5
 
 
+def __rfkill_unblock(idx: int) -> None:
+    """Unblock an rfkill device."""
+    with open(rfkill.dpath, "wb") as fout:
+        fout.write(
+            rfkh.rfkill_event(idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0)
+        )
+
+
 def rfkill_unblock(hci: int, idx: int) -> bool:
     """Try to remove an rfkill soft block."""
     try:
-        rfkill.rfkill_unblock(idx)
+        __rfkill_unblock(idx)
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception("RF kill switch unblock of hci%i (idx:%s) failed", hci, idx)
         return False
