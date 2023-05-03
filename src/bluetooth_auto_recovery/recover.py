@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import ctypes
 import logging
 import socket
 import struct
@@ -15,13 +14,7 @@ import async_timeout
 import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
 from btsocket import btmgmt_protocol, btmgmt_socket
-from btsocket.btmgmt_socket import (
-    AF_BLUETOOTH,
-    BTPROTO_HCI,
-    PF_BLUETOOTH,
-    SOCK_RAW,
-    SocketAddr,
-)
+from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
 
 _LOGGER = logging.getLogger(__name__)
@@ -592,26 +585,9 @@ def raw_open(adapter_idx: int) -> socket.socket:
     Based on mgmt socket at:
     https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/mgmt-api.txt
     """
-    ctypes.cdll.LoadLibrary("libc.so.6")
-    libc = ctypes.CDLL("libc.so.6")
-
-    libc_socket = libc.socket
-    libc_socket.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
-    libc_socket.restype = ctypes.c_int
-
-    bind = libc.bind
-    bind.argtypes = (ctypes.c_int, ctypes.POINTER(SocketAddr), ctypes.c_int)
-    bind.restype = ctypes.c_int
-
-    fd = libc_socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)
-
-    if fd < 0:
-        raise OSError("Unable to open PF_BLUETOOTH socket")
-
-    sock_fd = socket.socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI, fileno=fd)
-    sock_fd.bind((adapter_idx,))
-
-    return sock_fd
+    sock = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW, BTPROTO_HCI)
+    sock.bind((adapter_idx,))
+    return sock
 
 
 def raw_close(bt_socket: socket.socket) -> None:
