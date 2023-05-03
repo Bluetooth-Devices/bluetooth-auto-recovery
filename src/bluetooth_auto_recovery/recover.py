@@ -477,14 +477,19 @@ async def _usb_reset_adapter(hci: int) -> bool:
         return False
 
 
-async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> bool:
+async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
+    assert adapter.sock is not None, "Adapter socket is not initialized"  # nosec
+    _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
     buffer = struct.pack("I", adapter.idx)
+    _LOGGER.debug("Setting hci%i down", adapter.idx)
     ioctl(adapter.sock, HCIDEVDOWN, buffer)
     await asyncio.sleep(0.5)
     buffer = struct.pack("I", adapter.idx)
+    _LOGGER.debug("Setting hci%i up", adapter.idx)
     ioctl(adapter.sock, HCIDEVUP, buffer)
     await asyncio.sleep(0.5)
+    _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
 
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
