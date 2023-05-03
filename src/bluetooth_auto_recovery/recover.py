@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import ctypes
 import logging
 import socket
 import struct
@@ -14,6 +15,13 @@ import async_timeout
 import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
 from btsocket import btmgmt_protocol, btmgmt_socket
+from btsocket.btmgmt_socket import (
+    AF_BLUETOOTH,
+    BTPROTO_HCI,
+    PF_BLUETOOTH,
+    SOCK_RAW,
+    SocketAddr,
+)
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
 
 _LOGGER = logging.getLogger(__name__)
@@ -479,17 +487,21 @@ async def _usb_reset_adapter(hci: int) -> bool:
 
 async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
-    assert adapter.sock is not None, "Adapter socket is not initialized"  # nosec
-    _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
-    buffer = struct.pack("I", adapter.idx)
-    _LOGGER.debug("Setting hci%i down", adapter.idx)
-    ioctl(adapter.sock, HCIDEVDOWN, buffer)
-    await asyncio.sleep(0.5)
-    buffer = struct.pack("I", adapter.idx)
-    _LOGGER.debug("Setting hci%i up", adapter.idx)
-    ioctl(adapter.sock, HCIDEVUP, buffer)
-    await asyncio.sleep(0.5)
-    _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
+    loop = asyncio.get_running_loop()
+    socket = await loop.run_in_executor(None, raw_open)
+    try:
+        _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
+        buffer = struct.pack("I", adapter.idx)
+        _LOGGER.debug("Setting hci%i down", adapter.idx)
+        await loop.run_in_executor(None, ioctl, socket, HCIDEVDOWN, buffer)
+        await asyncio.sleep(0.5)
+        buffer = struct.pack("I", adapter.idx)
+        _LOGGER.debug("Setting hci%i up", adapter.idx)
+        await loop.run_in_executor(None, ioctl, socket, HCIDEVUP, buffer)
+        await asyncio.sleep(0.5)
+        _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
+    finally:
+        await loop.run_in_executor(None, raw_close, socket)
 
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
@@ -570,3 +582,37 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         name,
     )
     return False
+
+
+def raw_open() -> socket.socket:
+    """
+    Because of the following issue with Python the Bluetooth User socket
+    on linux needs to be done with lower level calls.
+    https://bugs.python.org/issue36132
+    Based on mgmt socket at:
+    https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/mgmt-api.txt
+    """
+    ctypes.cdll.LoadLibrary("libc.so.6")
+    libc = ctypes.CDLL("libc.so.6")
+
+    libc_socket = libc.socket
+    libc_socket.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_int)
+    libc_socket.restype = ctypes.c_int
+
+    bind = libc.bind
+    bind.argtypes = (ctypes.c_int, ctypes.POINTER(SocketAddr), ctypes.c_int)
+    bind.restype = ctypes.c_int
+
+    fd = libc_socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI)
+
+    if fd < 0:
+        raise OSError("Unable to open PF_BLUETOOTH socket")
+
+    sock_fd = socket.socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI, fileno=fd)
+    return sock_fd
+
+
+def raw_close(bt_socket: socket.socket) -> None:
+    """Close the open socket"""
+    fd = bt_socket.detach()
+    socket.close(fd)
