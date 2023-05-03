@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.1.0 (2023-05-03)
+### Feature
+* Do a down/up on the interface when resetting the adapter ([#31](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/31)) ([`ae3f63b`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/ae3f63b0b13672df6375e4c6ee5514439484a31f))
+
 ## v1.0.3 (2022-12-15)
 ### Fix
 * Handle the btsocket being closed out from under us ([#29](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/29)) ([`1e0d878`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/1e0d87853379e1ca89b50ecd9698e8c61c37e398))
