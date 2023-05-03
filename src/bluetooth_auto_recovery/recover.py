@@ -581,19 +581,13 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
 
 
 def raw_open(adapter_idx: int) -> socket.socket:
-    """
-    Because of the following issue with Python the Bluetooth User socket
-    on linux needs to be done with lower level calls.
-    https://bugs.python.org/issue36132
-    Based on mgmt socket at:
-    https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/doc/mgmt-api.txt
-    """
+    """Create a bluetooth socket for a specific adapter."""
     sock = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW, BTPROTO_HCI)
     sock.bind((adapter_idx,))
     return sock
 
 
 def raw_close(bt_socket: socket.socket) -> None:
-    """Close the open socket"""
+    """Close the bluetooth socket."""
     fd = bt_socket.detach()
     socket.close(fd)
