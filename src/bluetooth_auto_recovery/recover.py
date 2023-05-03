@@ -1,17 +1,21 @@
 """Automatic recovery for bluetooth adapters."""
 from __future__ import annotations
 
+import array
 import asyncio
 import logging
 import socket
+import struct
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from fcntl import ioctl
 from typing import Any, AsyncIterator, cast
 
 import async_timeout
 import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
 from btsocket import btmgmt_protocol, btmgmt_socket
+from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
 
 _LOGGER = logging.getLogger(__name__)
@@ -22,6 +26,10 @@ MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 1.5
 
 MGMT_PROTOCOL_TIMEOUT = 5
+
+# https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/lib/hci.h
+HCIDEVUP = 0x400448C9  # 201
+HCIDEVDOWN = 0x400448CA  # 202
 
 
 @dataclass
@@ -471,6 +479,27 @@ async def _usb_reset_adapter(hci: int) -> bool:
         return False
 
 
+async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
+    """Bounce the adapter ex. hciconfig down/up."""
+    loop = asyncio.get_running_loop()
+    socket = await loop.run_in_executor(None, raw_open, adapter.idx)
+    try:
+        _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
+        req_str = struct.pack("H", adapter.idx)
+        request = array.array("b", req_str)
+        _LOGGER.debug("Setting hci%i down", adapter.idx)
+        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVDOWN, request[0])
+        await asyncio.sleep(0.5)
+        req_str = struct.pack("H", adapter.idx)
+        request = array.array("b", req_str)
+        _LOGGER.debug("Setting hci%i up", adapter.idx)
+        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVUP, request[0])
+        await asyncio.sleep(0.5)
+        _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
+    finally:
+        await loop.run_in_executor(None, raw_close, socket)
+
+
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
     name = f"hci{adapter.idx} [{adapter.mac}]"
@@ -491,7 +520,6 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             name,
             ex,
         )
-        return False
 
     if pstate_before is True:
         _LOGGER.debug("Current power state of bluetooth adapter is ON.")
@@ -511,6 +539,11 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     else:
         _LOGGER.debug("Power state of bluetooth adapter could not be determined")
         return False
+
+    try:
+        await _bounce_adapter_interface(adapter)
+    except Exception as ex:  # pylint: disable=broad-except
+        _LOGGER.warning("Could not cycle the Bluetooth adapter %s: %s", name, ex)
 
     try:
         await adapter.set_powered(True)
@@ -545,3 +578,16 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         name,
     )
     return False
+
+
+def raw_open(adapter_idx: int) -> socket.socket:
+    """Create a bluetooth socket for a specific adapter."""
+    sock = socket.socket(AF_BLUETOOTH, socket.SOCK_RAW, BTPROTO_HCI)
+    sock.bind((adapter_idx,))
+    return sock
+
+
+def raw_close(bt_socket: socket.socket) -> None:
+    """Close the bluetooth socket."""
+    fd = bt_socket.detach()
+    socket.close(fd)
