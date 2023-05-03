@@ -1,6 +1,7 @@
 """Automatic recovery for bluetooth adapters."""
 from __future__ import annotations
 
+import array
 import asyncio
 import logging
 import socket
@@ -484,13 +485,15 @@ async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     socket = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
-        buffer = struct.pack("H", adapter.idx)
+        req_str = struct.pack("H", adapter.idx)
+        request = array.array("b", req_str)
         _LOGGER.debug("Setting hci%i down", adapter.idx)
-        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVDOWN, buffer)
+        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVDOWN, request)
         await asyncio.sleep(0.5)
-        buffer = struct.pack("H", adapter.idx)
+        req_str = struct.pack("H", adapter.idx)
+        request = array.array("b", req_str)
         _LOGGER.debug("Setting hci%i up", adapter.idx)
-        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVUP, buffer)
+        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVUP, request)
         await asyncio.sleep(0.5)
         _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
     finally:
