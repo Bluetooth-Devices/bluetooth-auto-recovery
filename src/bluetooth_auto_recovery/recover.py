@@ -488,7 +488,7 @@ async def _usb_reset_adapter(hci: int) -> bool:
 async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
     loop = asyncio.get_running_loop()
-    socket = await loop.run_in_executor(None, raw_open)
+    socket = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
         buffer = struct.pack("I", adapter.idx)
@@ -584,7 +584,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     return False
 
 
-def raw_open() -> socket.socket:
+def raw_open(adapter_idx: int) -> socket.socket:
     """
     Because of the following issue with Python the Bluetooth User socket
     on linux needs to be done with lower level calls.
@@ -609,6 +609,8 @@ def raw_open() -> socket.socket:
         raise OSError("Unable to open PF_BLUETOOTH socket")
 
     sock_fd = socket.socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI, fileno=fd)
+    sock_fd.bind((adapter_idx,))
+
     return sock_fd
 
 
