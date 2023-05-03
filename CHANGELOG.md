@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.1.1 (2023-05-03)
+### Fix
+* Pass on event types we do not know how to process ([#33](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/33)) ([`2bbca73`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/2bbca73867f6bbd599544fe47ff6b0c468c6436a))
+
 ## v1.1.0 (2023-05-03)
 ### Feature
 * Do a down/up on the interface when resetting the adapter ([#31](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/31)) ([`ae3f63b`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/ae3f63b0b13672df6375e4c6ee5514439484a31f))
