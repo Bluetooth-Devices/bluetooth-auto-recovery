@@ -125,13 +125,18 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 
     def data_received(self, data: bytes) -> None:
         """Handle data received."""
-        if (
-            self.future
-            and not self.future.done()
-            and (response := btmgmt_protocol.reader(data))
-            and response.cmd_response_frame
-        ):
-            self.future.set_result(response)
+        try:
+            if (
+                self.future
+                and not self.future.done()
+                and (response := btmgmt_protocol.reader(data))
+                and response.cmd_response_frame
+            ):
+                self.future.set_result(response)
+        except ValueError as ex:
+            # ValueError: 47 is not a valid Events may happen on newer kernels
+            # and we need to ignore these events
+            _LOGGER.debug("Error parsing response: %s", ex)
 
     async def send(self, *args: Any) -> btmgmt_protocol.Response:
         """Send command."""
