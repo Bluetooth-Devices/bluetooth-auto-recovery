@@ -484,11 +484,11 @@ async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     socket = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
-        buffer = struct.pack("I", adapter.idx)
+        buffer = struct.pack("H", adapter.idx)
         _LOGGER.debug("Setting hci%i down", adapter.idx)
         await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVDOWN, buffer)
         await asyncio.sleep(0.5)
-        buffer = struct.pack("I", adapter.idx)
+        buffer = struct.pack("H", adapter.idx)
         _LOGGER.debug("Setting hci%i up", adapter.idx)
         await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVUP, buffer)
         await asyncio.sleep(0.5)
