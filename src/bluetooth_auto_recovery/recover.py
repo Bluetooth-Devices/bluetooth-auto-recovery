@@ -4,8 +4,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+import struct
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from fcntl import ioctl
 from typing import Any, AsyncIterator, cast
 
 import async_timeout
@@ -22,6 +24,10 @@ MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 1.5
 
 MGMT_PROTOCOL_TIMEOUT = 5
+
+# https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/lib/hci.h
+HCIDEVUP = 0x400448C9  # 201
+HCIDEVDOWN = 0x400448CA  # 202
 
 
 @dataclass
@@ -471,6 +477,16 @@ async def _usb_reset_adapter(hci: int) -> bool:
         return False
 
 
+async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> bool:
+    """Bounce the adapter ex. hciconfig down/up."""
+    buffer = struct.pack("I", adapter.idx)
+    ioctl(adapter.sock, HCIDEVDOWN, buffer)
+    await asyncio.sleep(0.5)
+    buffer = struct.pack("I", adapter.idx)
+    ioctl(adapter.sock, HCIDEVUP, buffer)
+    await asyncio.sleep(0.5)
+
+
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
     name = f"hci{adapter.idx} [{adapter.mac}]"
@@ -491,7 +507,6 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             name,
             ex,
         )
-        return False
 
     if pstate_before is True:
         _LOGGER.debug("Current power state of bluetooth adapter is ON.")
@@ -511,6 +526,11 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     else:
         _LOGGER.debug("Power state of bluetooth adapter could not be determined")
         return False
+
+    try:
+        await _bounce_adapter_interface(adapter)
+    except Exception as ex:  # pylint: disable=broad-except
+        _LOGGER.warning("Could not cycle the Bluetooth adapter %s: %s", name, ex)
 
     try:
         await adapter.set_powered(True)
