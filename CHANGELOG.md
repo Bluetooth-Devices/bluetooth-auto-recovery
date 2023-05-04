@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.1.2 (2023-05-04)
+### Fix
+* Proceed with reset when getting power state times out ([#34](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/34)) ([`aae8c84`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/aae8c848fb894686ba1076d395b402701b0cedc5))
+
 ## v1.1.1 (2023-05-03)
 ### Fix
 * Pass on event types we do not know how to process ([#33](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/33)) ([`2bbca73`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/2bbca73867f6bbd599544fe47ff6b0c468c6436a))
