@@ -451,7 +451,11 @@ async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
         _LOGGER.warning("Bluetooth adapter %s could not be reset: %s", name, ex)
         return False
     except asyncio.TimeoutError:
-        _LOGGER.warning("Bluetooth adapter %s could not be reset due to timeout", name)
+        _LOGGER.warning(
+            "Bluetooth adapter %s could not be reset due to timeout after %s seconds",
+            name,
+            adapter.timeout,
+        )
         return False
 
 
@@ -517,32 +521,30 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         )
         return False
 
+    timed_out_getting_powered: bool = False
+    power_state_before_reset: bool | None = None
     try:
-        pstate_before = await adapter.get_powered()
+        power_state_before_reset = await adapter.get_powered()
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not determine the power state of the Bluetooth adapter %s: %s",
             name,
             ex,
         )
-
-    if pstate_before is True:
-        _LOGGER.debug("Current power state of bluetooth adapter is ON.")
-        try:
-            await adapter.set_powered(False)
-        except AttributeError as ex:
-            _LOGGER.warning(
-                "Could not power cycle the Bluetooth adapter %s: %s", name, ex
-            )
-            return False
-        await adapter.wait_for_power_state(False, POWER_OFF_TIME)
-    elif pstate_before is False:
-        _LOGGER.debug(
-            "Current power state of bluetooth adapter %s is OFF, trying to turn it back ON",
+    except asyncio.TimeoutError:
+        _LOGGER.warning(
+            "Could not determine the power state of the Bluetooth adapter %s due to timeout after %s seconds",
             name,
+            adapter.timeout,
         )
-    else:
-        _LOGGER.debug("Power state of bluetooth adapter could not be determined")
+        timed_out_getting_powered = True
+
+    # Do not attempt to power off if it timed out getting the power state
+    # as it likely means the adapter interface is frozen and will not respond to
+    # power off commands so we need to proceed to bounce the interface
+    if not timed_out_getting_powered and not await _execute_power_off(
+        adapter, name, power_state_before_reset
+    ):
         return False
 
     try:
@@ -550,6 +552,13 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.warning("Could not cycle the Bluetooth adapter %s: %s", name, ex)
 
+    return await _execute_power_on(adapter, name, power_state_before_reset)
+
+
+async def _execute_power_on(
+    adapter: MGMTBluetoothCtl, name: str, power_state_before_reset: bool | None
+) -> bool:
+    """Execute the power off."""
     try:
         await adapter.set_powered(True)
     except AttributeError as ex:
@@ -564,7 +573,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
 
     # Check the state after the reset
     if pstate_after is True:
-        if pstate_before is False:
+        if power_state_before_reset is False:
             _LOGGER.warning("Bluetooth adapter %s successfully turned back ON", name)
         else:
             _LOGGER.debug(
@@ -583,6 +592,32 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         name,
     )
     return False
+
+
+async def _execute_power_off(
+    adapter: MGMTBluetoothCtl, name: str, power_state_before_reset: bool | None
+) -> bool:
+    """Execute the power off."""
+    if power_state_before_reset is True:
+        _LOGGER.debug("Current power state of bluetooth adapter is ON.")
+        try:
+            await adapter.set_powered(False)
+        except AttributeError as ex:
+            _LOGGER.warning(
+                "Could not power cycle the Bluetooth adapter %s: %s", name, ex
+            )
+            return False
+        await adapter.wait_for_power_state(False, POWER_OFF_TIME)
+    elif power_state_before_reset is False:
+        _LOGGER.debug(
+            "Current power state of bluetooth adapter %s is OFF, trying to turn it back ON",
+            name,
+        )
+    else:
+        _LOGGER.debug("Power state of bluetooth adapter could not be determined")
+        return False
+
+    return True
 
 
 def raw_open(adapter_idx: int) -> socket.socket:
