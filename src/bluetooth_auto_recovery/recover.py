@@ -542,10 +542,15 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     # Do not attempt to power off if it timed out getting the power state
     # as it likely means the adapter interface is frozen and will not respond to
     # power off commands so we need to proceed to bounce the interface
-    if not timed_out_getting_powered and not await _execute_power_off(
-        adapter, name, power_state_before_reset
-    ):
-        return False
+    if not timed_out_getting_powered:
+        try:
+            await _execute_power_off(adapter, name, power_state_before_reset)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(
+                "Could not reset the power state of the Bluetooth adapter %s due to timeout after %s seconds",
+                name,
+                adapter.timeout,
+            )
 
     try:
         await _bounce_adapter_interface(adapter)
