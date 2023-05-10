@@ -2,6 +2,10 @@
 
 <!--next-version-placeholder-->
 
+## v1.2.0 (2023-05-10)
+### Feature
+* Try to bounce the adapter if setting power state fails ([#36](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/36)) ([`11ec5e2`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/11ec5e2e5b8fc8e6d58d9b822dc333dbf89e6952))
+
 ## v1.1.2 (2023-05-04)
 ### Fix
 * Proceed with reset when getting power state times out ([#34](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/34)) ([`aae8c84`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/aae8c848fb894686ba1076d395b402701b0cedc5))
