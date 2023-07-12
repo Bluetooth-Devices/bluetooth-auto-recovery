@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.2.1 (2023-07-12)
+
+### Fix
+
+* Make MGMTBluetoothCtl aware of down adapters ([#38](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/38)) ([`3c6bc12`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/3c6bc12e021611590e13c400aeedc665b582a9c3))
+
 ## v1.2.0 (2023-05-10)
 ### Feature
 * Try to bounce the adapter if setting power state fails ([#36](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/36)) ([`11ec5e2`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/11ec5e2e5b8fc8e6d58d9b822dc333dbf89e6952))
