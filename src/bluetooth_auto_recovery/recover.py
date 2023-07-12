@@ -215,6 +215,17 @@ class MGMTBluetoothCtl:
                     )
                     return
 
+            for adapter in adapters_from_hci.values():
+                if adapter["name"] == self._expected_hci:
+                    self.idx = adapter["dev_id"]
+                    _LOGGER.debug(
+                        "Found adapter %s as hci device %s as %s",
+                        self.mac,
+                        self._expected_hci,
+                        self.idx,
+                    )
+                    return
+
         idxdata = await self.protocol.send("ReadControllerIndexList", None)
         if idxdata.event_frame.status.value != 0x00:  # 0x00 - Success
             _LOGGER.error(
