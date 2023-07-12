@@ -207,9 +207,12 @@ class MGMTBluetoothCtl:
         # Try to get the adapter index from the hci device first
         # since it can see downed adapters.
         if adapters_from_hci := await loop.run_in_executor(None, get_adapters_from_hci):
-            for idx, adapter in adapters_from_hci.items():
-                if adapter == self.mac:
-                    self.idx = idx
+            for adapter in adapters_from_hci.values():
+                if adapter["bdaddr"] == self.mac.upper():
+                    self.idx = adapter["dev_id"]
+                    _LOGGER.debug(
+                        "Found adapter %s in hci device as %s", self.mac, self.idx
+                    )
                     return
 
         idxdata = await self.protocol.send("ReadControllerIndexList", None)
