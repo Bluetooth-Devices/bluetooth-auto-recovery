@@ -14,6 +14,7 @@ from typing import Any, AsyncIterator, cast
 import async_timeout
 import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
+from bluetooth_adapters import get_adapters_from_hci
 from btsocket import btmgmt_protocol, btmgmt_socket
 from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
@@ -202,6 +203,15 @@ class MGMTBluetoothCtl:
     async def _find_controller(self) -> None:
         """Find the controller."""
         assert self.protocol is not None  # nosec
+        loop = asyncio.get_running_loop()
+        # Try to get the adapter index from the hci device first
+        # since it can see downed adapters.
+        if adapters_from_hci := await loop.run_in_executor(None, get_adapters_from_hci):
+            for idx, adapter in adapters_from_hci.items():
+                if adapter == self.mac:
+                    self.idx = idx
+                    return
+
         idxdata = await self.protocol.send("ReadControllerIndexList", None)
         if idxdata.event_frame.status.value != 0x00:  # 0x00 - Success
             _LOGGER.error(
