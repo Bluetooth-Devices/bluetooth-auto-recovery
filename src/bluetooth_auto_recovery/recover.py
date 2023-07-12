@@ -217,7 +217,8 @@ class MGMTBluetoothCtl:
                     return
 
             for adapter in adapters_from_hci.values():
-                if adapter["name"] == self._expected_hci:
+                expected_hci_name = f"hci{self._expected_hci}"
+                if adapter["name"] == expected_hci_name:
                     self.idx = adapter["dev_id"]
                     _LOGGER.debug(
                         "Found adapter %s as hci device %s as %s",
