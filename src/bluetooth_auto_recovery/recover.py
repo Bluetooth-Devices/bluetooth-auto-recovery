@@ -149,7 +149,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         self.future = asyncio.Future()
         assert self.transport is not None  # nosec
         self.transport.write(full_pkt)
-        with async_timeout.timeout(self.timeout):
+        async with async_timeout.timeout(self.timeout):
             return await self.future
 
     def connection_lost(self, exc: Exception | None) -> None:
