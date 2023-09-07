@@ -11,13 +11,14 @@ from dataclasses import dataclass
 from fcntl import ioctl
 from typing import Any, AsyncIterator, cast
 
-import async_timeout
 import pyric.net.wireless.rfkill_h as rfkh
 import pyric.utils.rfkill as rfkill
 from bluetooth_adapters import get_adapters_from_hci
 from btsocket import btmgmt_protocol, btmgmt_socket
 from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
+
+from .util import asyncio_timeout
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         self.future = asyncio.Future()
         assert self.transport is not None  # nosec
         self.transport.write(full_pkt)
-        with async_timeout.timeout(self.timeout):
+        with asyncio_timeout(self.timeout):
             return await self.future
 
     def connection_lost(self, exc: Exception | None) -> None:
@@ -184,7 +185,7 @@ class MGMTBluetoothCtl:
         self.sock = btmgmt_socket.open()
         loop = asyncio.get_running_loop()
         try:
-            async with async_timeout.timeout(5):
+            async with asyncio_timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
                 _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
@@ -284,7 +285,7 @@ class MGMTBluetoothCtl:
         assert self.protocol is not None  # nosec
         current_state: bool | None = not new_state
         try:
-            async with async_timeout.timeout(timeout):
+            async with asyncio_timeout(timeout):
                 while True:
                     current_state = await self.get_powered()
                     if current_state == new_state:
@@ -298,7 +299,7 @@ async def _check_rfkill(hci: int) -> RFKillInfo:
     """Check if rfkill is blocked."""
     loop = asyncio.get_running_loop()
     try:
-        async with async_timeout.timeout(MAX_RFKILL_TIME):
+        async with asyncio_timeout(MAX_RFKILL_TIME):
             return await loop.run_in_executor(None, rfkill_list_bluetooth, hci)
     except asyncio.TimeoutError:
         _LOGGER.warning(
@@ -314,7 +315,7 @@ async def _unblock_rfkill(hci: int, rfkill_idx: int) -> bool:
     """Try to unblock an adapter."""
     loop = asyncio.get_running_loop()
     try:
-        async with async_timeout.timeout(MAX_RFKILL_TIME):
+        async with asyncio_timeout(MAX_RFKILL_TIME):
             return await loop.run_in_executor(None, rfkill_unblock, hci, rfkill_idx)
     except asyncio.TimeoutError:
         _LOGGER.warning(
