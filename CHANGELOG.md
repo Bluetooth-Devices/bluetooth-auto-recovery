@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.2.2 (2023-09-07)
+
+### Fix
+
+* Ensure timeouts work with py3.11 ([#41](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/41)) ([`99b9f48`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/99b9f48f8f742d6004720b26e25b9c1f6cd455e7))
+
 ## v1.2.1 (2023-07-12)
 
 ### Fix
