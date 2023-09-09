@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.2.3 (2023-09-09)
+
+### Fix
+
+* Add missing async keyword to send timeout ([#42](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/42)) ([`1097e44`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/1097e44a8c6051aeb6e9f4d53631c8ecf1e47d54))
+
 ## v1.2.2 (2023-09-07)
 
 ### Fix
