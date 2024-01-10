@@ -8,7 +8,11 @@ import socket
 import struct
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from fcntl import ioctl
+
+try:
+    from fcntl import ioctl
+except ImportError:
+    ioctl = None  # type: ignore
 from typing import Any, AsyncIterator, cast
 
 import pyric.net.wireless.rfkill_h as rfkh
