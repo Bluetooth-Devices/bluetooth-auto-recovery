@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.3.0 (2024-01-10)
+
+### Feature
+
+* Ensure library can be loaded on windows ([#43](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/43)) ([`dd234f8`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/dd234f847c54fe8471b51378ab03b2d1a9f2f497))
+
 ## v1.2.3 (2023-09-09)
 
 ### Fix
