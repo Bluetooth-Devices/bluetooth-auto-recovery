@@ -11,12 +11,15 @@ from dataclasses import dataclass
 
 try:
     from fcntl import ioctl
+
+    import pyric.utils.rfkill as rfkill
 except ImportError:
     ioctl = None  # type: ignore
+    rfkill = None
+
 from typing import Any, AsyncIterator, cast
 
 import pyric.net.wireless.rfkill_h as rfkh
-import pyric.utils.rfkill as rfkill
 from bluetooth_adapters import get_adapters_from_hci
 from btsocket import btmgmt_protocol, btmgmt_socket
 from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
