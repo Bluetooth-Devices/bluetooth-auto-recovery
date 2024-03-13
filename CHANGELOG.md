@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.0 (2024-03-13)
+
+### Feature
+
+* Only import recovery code the first time the recovery is called ([#44](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/44)) ([`39372f0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/39372f085e624a7fba8d06ed1ddc8a4a52c7bb7c))
+
 ## v1.3.0 (2024-01-10)
 
 ### Feature
