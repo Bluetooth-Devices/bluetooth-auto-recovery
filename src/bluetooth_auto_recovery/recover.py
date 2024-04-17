@@ -122,14 +122,19 @@ def rfkill_list_bluetooth(hci: int) -> RFKillInfo:
 class BluetoothMGMTProtocol(asyncio.Protocol):
     """Bluetooth MGMT protocol."""
 
-    def __init__(self, timeout: float) -> None:
+    def __init__(
+        self, timeout: float, connection_mode_future: asyncio.Future[None]
+    ) -> None:
         """Initialize the protocol."""
         self.future: asyncio.Future[btmgmt_protocol.Response] | None = None
         self.transport: asyncio.Transport | None = None
         self.timeout = timeout
+        self.connection_mode_future = connection_mode_future
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Handle connection made."""
+        if not self.connection_mode_future.done():
+            self.connection_mode_future.set_result(None)
         self.transport = cast(asyncio.Transport, transport)
 
     def data_received(self, data: bytes) -> None:
@@ -191,16 +196,18 @@ class MGMTBluetoothCtl:
         """Set up management interface."""
         self.sock = btmgmt_socket.open()
         loop = asyncio.get_running_loop()
+        connection_made_future: asyncio.Future[None] = loop.create_future()
         try:
             async with asyncio_timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
                 _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
                     self.sock,
-                    lambda: BluetoothMGMTProtocol(self.timeout),
+                    lambda: BluetoothMGMTProtocol(self.timeout, connection_made_future),
                     None,
                     None,
                 )
+                await connection_made_future
         except asyncio.TimeoutError:
             btmgmt_socket.close(self.sock)
             raise
