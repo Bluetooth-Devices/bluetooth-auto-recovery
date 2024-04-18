@@ -122,14 +122,19 @@ def rfkill_list_bluetooth(hci: int) -> RFKillInfo:
 class BluetoothMGMTProtocol(asyncio.Protocol):
     """Bluetooth MGMT protocol."""
 
-    def __init__(self, timeout: float) -> None:
+    def __init__(
+        self, timeout: float, connection_mode_future: asyncio.Future[None]
+    ) -> None:
         """Initialize the protocol."""
         self.future: asyncio.Future[btmgmt_protocol.Response] | None = None
         self.transport: asyncio.Transport | None = None
         self.timeout = timeout
+        self.connection_mode_future = connection_mode_future
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Handle connection made."""
+        if not self.connection_mode_future.done():
+            self.connection_mode_future.set_result(None)
         self.transport = cast(asyncio.Transport, transport)
 
     def data_received(self, data: bytes) -> None:
@@ -191,16 +196,18 @@ class MGMTBluetoothCtl:
         """Set up management interface."""
         self.sock = btmgmt_socket.open()
         loop = asyncio.get_running_loop()
+        connection_made_future: asyncio.Future[None] = loop.create_future()
         try:
             async with asyncio_timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
                 _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
                     self.sock,
-                    lambda: BluetoothMGMTProtocol(self.timeout),
+                    lambda: BluetoothMGMTProtocol(self.timeout, connection_made_future),
                     None,
                     None,
                 )
+                await connection_made_future
         except asyncio.TimeoutError:
             btmgmt_socket.close(self.sock)
             raise
@@ -572,6 +579,11 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             adapter.timeout,
         )
         timed_out_getting_powered = True
+    except Exception:  # pylint: disable=broad-except
+        _LOGGER.exception(
+            "Could not determine the power state of the Bluetooth adapter %s: %s",
+            name,
+        )
 
     # Do not attempt to power off if it timed out getting the power state
     # as it likely means the adapter interface is frozen and will not respond to
@@ -585,13 +597,30 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
                 name,
                 adapter.timeout,
             )
+        except Exception:
+            _LOGGER.exception(
+                "Could not reset the power state of the Bluetooth adapter %s", name
+            )
 
     try:
         await _bounce_adapter_interface(adapter)
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.warning("Could not cycle the Bluetooth adapter %s: %s", name, ex)
 
-    return await _execute_power_on(adapter, name, power_state_before_reset)
+    try:
+        return await _execute_power_on(adapter, name, power_state_before_reset)
+    except asyncio.TimeoutError:
+        _LOGGER.warning(
+            "Could not reset the power state of the Bluetooth adapter %s due to timeout after %s seconds",
+            name,
+            adapter.timeout,
+        )
+        return False
+    except Exception:
+        _LOGGER.exception(
+            "Could not reset the power state of the Bluetooth adapter %s", name
+        )
+        return False
 
 
 async def _execute_power_on(
