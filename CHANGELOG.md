@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.1 (2024-04-18)
+
+### Fix
+
+* Wait for connection made ([#45](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/45)) ([`70aa8df`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/70aa8df23ac7a604177af680b63fdb1f00e430b8))
+
 ## v1.4.0 (2024-03-13)
 
 ### Feature
