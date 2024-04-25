@@ -156,10 +156,9 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
     async def send(self, *args: Any) -> btmgmt_protocol.Response:
         """Send command."""
         pkt_objs = btmgmt_protocol.command(*args)
-        full_pkt = b"".join(frame.octets for frame in pkt_objs if frame)
         self.future = self.loop.create_future()
         assert self.transport is not None  # nosec
-        self.transport.write(full_pkt)
+        self.transport.write(b"".join(frame.octets for frame in pkt_objs if frame))
         cancel_timeout = self.loop.call_later(
             self.timeout, self._timeout_future, self.future
         )
