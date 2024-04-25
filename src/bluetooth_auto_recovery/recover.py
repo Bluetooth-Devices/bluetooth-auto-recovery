@@ -160,17 +160,18 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         self.future = self.loop.create_future()
         assert self.transport is not None  # nosec
         self.transport.write(full_pkt)
-        cancel_timeout = self.loop.call_later(self.timeout, self._timeout_future)
+        cancel_timeout = self.loop.call_later(
+            self.timeout, self._timeout_future, self.future
+        )
         try:
             return await self.future
         finally:
             cancel_timeout.cancel()
+            self.future = None
 
-    def _timeout_future(self) -> None:
-        if self.future and not self.future.done():
-            self.future.set_exception(
-                asyncio.TimeoutError("Timeout waiting for response")
-            )
+    def _timeout_future(self, future: asyncio.Future[btmgmt_protocol.Response]) -> None:
+        if future and not future.done():
+            future.set_exception(asyncio.TimeoutError("Timeout waiting for response"))
 
     def connection_lost(self, exc: Exception | None) -> None:
         """Handle connection lost."""
