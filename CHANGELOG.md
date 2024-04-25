@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.2 (2024-04-25)
+
+### Fix
+
+* Ensure timeout does not raise cancellation ([#46](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/46)) ([`4575fdd`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/4575fdd52778e09dee5e6bce51e7636e9609aaac))
+
 ## v1.4.1 (2024-04-18)
 
 ### Fix
