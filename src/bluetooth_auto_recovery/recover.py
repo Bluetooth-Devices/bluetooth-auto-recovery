@@ -1,4 +1,5 @@
 """Automatic recovery for bluetooth adapters."""
+
 from __future__ import annotations
 
 import array
