@@ -540,6 +540,7 @@ async def _usb_reset_adapter(hci: int) -> bool:
 async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
     loop = asyncio.get_running_loop()
+    assert adapter.idx is not None, "Adapter must have an idx"  # nosec
     socket = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)

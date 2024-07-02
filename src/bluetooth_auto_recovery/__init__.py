@@ -24,11 +24,11 @@ async def recover_adapter(hci: int, mac: str) -> bool:
         recover_module = await loop.run_in_executor(
             None, importlib.import_module, recover_module_name
         )
-        _MODULE_CACHE[recover_module_name] = recover_module  # type: ignore
+        _MODULE_CACHE[recover_module_name] = recover_module
         this_module = sys.modules[__package__]
         this_module.recover_adapter = recover_module.recover_adapter  # type: ignore
 
-    return await recover_module.recover_adapter(hci, mac)  # type: ignore
+    return await recover_module.recover_adapter(hci, mac)
 
 
 __all__ = ["recover_adapter"]
