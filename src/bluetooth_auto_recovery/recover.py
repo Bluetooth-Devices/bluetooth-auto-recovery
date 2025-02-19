@@ -281,6 +281,17 @@ class MGMTBluetoothCtl:
                 self.idx = idx
                 self.hci_name = f"hci{idx}"
                 return
+        expected_hci = hci_name_to_number(self._expected_hci_name)
+        if expected_hci in self.presented_list:
+            _LOGGER.warning(
+                "The mac address %s was not found in the adapter list: %s, "
+                "falling back to matching by %s",
+                self.mac,
+                self.presented_list,
+                self._expected_hci_name,
+            )
+            self.idx = expected_hci
+            self.hci_name = self._expected_hci_name
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
@@ -529,9 +540,14 @@ async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
         return False
 
 
+def hci_name_to_number(hci_name: str) -> int:
+    """Convert hci name to number."""
+    return int(hci_name.removeprefix("hci"))
+
+
 async def _usb_reset_adapter(hci_name: str) -> bool:
     """Reset the bluetooth adapter."""
-    hci = int(hci_name.removeprefix("hci"))
+    hci = hci_name_to_number(hci_name)
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
     try:
