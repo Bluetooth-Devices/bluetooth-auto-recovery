@@ -501,7 +501,10 @@ async def _get_adapter(
             adapter.mac,
             adapter.idx,
         )
-        yield adapter
+        if adapter.idx is not None:
+            yield adapter
+        else:
+            yield None
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
             "Getting Bluetooth adapter failed %s "
