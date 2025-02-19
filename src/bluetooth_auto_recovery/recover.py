@@ -478,7 +478,12 @@ async def _get_adapter(
     try:
         adapter = MGMTBluetoothCtl(hci_name, mac, MGMT_PROTOCOL_TIMEOUT)
         await adapter.setup()
-        _LOGGER.debug("%s (%s) idx is %s", adapter.hci_name, mac, adapter.idx)
+        _LOGGER.debug(
+            "_get_adapter: %s (hci_name=%s) (idx=%s)",
+            name,
+            adapter.hci_name,
+            adapter.idx,
+        )
         yield adapter
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
