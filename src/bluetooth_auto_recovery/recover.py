@@ -408,7 +408,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
             )
             return False
 
-        if adapter and adapter.idx and adapter.idx != hci:
+        if adapter and adapter.idx is not None and adapter.idx != hci:
             hci = adapter.idx
             _LOGGER.warning(
                 "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
@@ -438,7 +438,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
             )
             return False
 
-        if adapter and adapter.idx and adapter.idx != hci:
+        if adapter and adapter.idx is not None and adapter.idx != hci:
             hci = adapter.idx
             _LOGGER.warning(
                 "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
