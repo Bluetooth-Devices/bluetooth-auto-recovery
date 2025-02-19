@@ -270,7 +270,7 @@ class MGMTBluetoothCtl:
         _LOGGER.debug("hci_idx_list: %s", hci_idx_list)
         for idx in hci_idx_list:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
-            _LOGGER.debug(hci_info)
+            _LOGGER.debug("controller idx %s: %s", idx, hci_info)
             response = hci_info.cmd_response_frame
             mac = response.address
             self.presented_list[idx] = mac
