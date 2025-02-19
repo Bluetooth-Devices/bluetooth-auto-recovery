@@ -611,26 +611,38 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool:
         return False
 
 
-async def _bounce_adapter_interface(adapter: MGMTBluetoothCtl) -> None:
+async def _set_adapter_up_down(
+    adapter: MGMTBluetoothCtl,
+    sock: socket.socket,
+    loop: asyncio.AbstractEventLoop,
+    code: int,
+    state: str,
+) -> None:
+    """Set the adapter up or down."""
+    req_str = struct.pack("H", adapter.idx)
+    request = array.array("b", req_str)
+    _LOGGER.debug("Setting hci%i %s", adapter.idx, state)
+    await loop.run_in_executor(None, ioctl, sock.fileno(), code, request[0])
+
+
+async def _bounce_adapter_interface(
+    adapter: MGMTBluetoothCtl, *, up: bool, down: bool
+) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
     loop = asyncio.get_running_loop()
     assert adapter.idx is not None, "Adapter must have an idx"  # nosec
-    socket = await loop.run_in_executor(None, raw_open, adapter.idx)
+    sock = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
-        req_str = struct.pack("H", adapter.idx)
-        request = array.array("b", req_str)
-        _LOGGER.debug("Setting hci%i down", adapter.idx)
-        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVDOWN, request[0])
-        await asyncio.sleep(0.5)
-        req_str = struct.pack("H", adapter.idx)
-        request = array.array("b", req_str)
-        _LOGGER.debug("Setting hci%i up", adapter.idx)
-        await loop.run_in_executor(None, ioctl, socket.fileno(), HCIDEVUP, request[0])
-        await asyncio.sleep(0.5)
+        if down:
+            await _set_adapter_up_down(adapter, sock, loop, HCIDEVDOWN, "down")
+            await asyncio.sleep(0.5)
+        if up:
+            await _set_adapter_up_down(adapter, sock, loop, HCIDEVUP, "up")
+            await asyncio.sleep(0.5)
         _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
     finally:
-        await loop.run_in_executor(None, raw_close, socket)
+        await loop.run_in_executor(None, raw_close, sock)
 
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
@@ -677,14 +689,14 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             )
 
     try:
-        await _bounce_adapter_interface(adapter)
+        await _bounce_adapter_interface(adapter, down=True, up=True)
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.warning(
             "Could not cycle the Bluetooth adapter %s: %s", adapter.name, ex
         )
 
     try:
-        return await _execute_power_on(adapter, power_state_before_reset)
+        power_on_ok = await _execute_power_on(adapter, power_state_before_reset)
     except asyncio.TimeoutError:
         _LOGGER.warning(
             "Could not reset the power state of the Bluetooth adapter %s due to timeout after %s seconds",
@@ -697,6 +709,19 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             "Could not reset the power state of the Bluetooth adapter %s", adapter.name
         )
         return False
+
+    if not power_on_ok:
+        return False
+
+    try:
+        await _bounce_adapter_interface(adapter, down=False, up=True)
+    except Exception as ex:  # pylint: disable=broad-except
+        _LOGGER.warning(
+            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
+        )
+        return False
+
+    return True
 
 
 async def _execute_power_on(
