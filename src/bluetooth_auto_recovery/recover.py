@@ -187,9 +187,13 @@ class MGMTBluetoothCtl:
         # These get set when we enumerate the controllers
         self.idx: int | None = None
         self.hci_name: str | None = None
+        self.mac: str | None = None
 
-        self.mac = mac
+        # This is what we expect to find
+        self._expected_bdaddr = mac.upper()
         self._expected_hci_name = hci_name
+
+        # Internal state
         self.timeout = timeout
         self.protocol: BluetoothMGMTProtocol | None = None
         self.presented_list: dict[int, str] = {}
@@ -234,9 +238,10 @@ class MGMTBluetoothCtl:
         if adapters_from_hci := await loop.run_in_executor(None, get_adapters_from_hci):
             _LOGGER.debug("Found adapters from hci: %s", adapters_from_hci)
             for adapter in adapters_from_hci.values():
-                if adapter["bdaddr"] == self.mac.upper():
+                if adapter["bdaddr"] == self._expected_bdaddr:
                     self.idx = adapter["dev_id"]
                     self.hci_name = adapter["name"]
+                    self.mac = adapter["bdaddr"]
                     _LOGGER.debug(
                         "Found adapter %s by mac in hci device as %s",
                         self.mac,
@@ -248,6 +253,7 @@ class MGMTBluetoothCtl:
                 if adapter["name"] == self._expected_hci_name:
                     self.idx = adapter["dev_id"]
                     self.hci_name = adapter["name"]
+                    self.mac = adapter["bdaddr"]
                     _LOGGER.debug(
                         "Found adapter %s by name as hci device %s as %s",
                         self.mac,
@@ -272,26 +278,28 @@ class MGMTBluetoothCtl:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug("controller idx %s: %s", idx, hci_info)
             response = hci_info.cmd_response_frame
-            mac: str = response.address
+            mac: str = response.address.upper()
             self.presented_list[idx] = mac
-            if self.mac == mac:
+            if self._expected_bdaddr == mac:
                 _LOGGER.debug(
                     "Found adapter %s by mac by reading controller info %s", mac, idx
                 )
                 self.idx = idx
                 self.hci_name = f"hci{idx}"
+                self.mac = mac
                 return
         expected_hci = hci_name_to_number(self._expected_hci_name)
-        if expected_hci in self.presented_list:
+        if maybe_mac := self.presented_list.get(expected_hci):
             _LOGGER.warning(
                 "The mac address %s was not found in the adapter list: %s, "
                 "falling back to matching by %s",
-                self.mac,
+                self._expected_bdaddr,
                 self.presented_list,
                 self._expected_hci_name,
             )
             self.idx = expected_hci
             self.hci_name = self._expected_hci_name
+            self.mac = maybe_mac
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
@@ -427,7 +435,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
         if adapter and adapter.hci_name is not None and adapter.hci_name != hci_name:
             hci_name = adapter.hci_name
             _LOGGER.warning(
-                "Adapter with mac address %s has moved to %s", mac, hci_name
+                "Adapter with mac address %s has moved to %s", adapter.mac, hci_name
             )
 
         if not await _check_or_unblock_rfkill(hci_name):
@@ -459,7 +467,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
         if adapter and adapter.hci_name is not None and adapter.hci_name != hci_name:
             hci_name = adapter.hci_name
             _LOGGER.warning(
-                "Adapter with mac address %s has moved to %s", mac, hci_name
+                "Adapter with mac address %s has moved to %s", adapter.mac, hci_name
             )
 
         # After the reset, rfkill may be blocked so we need
@@ -487,9 +495,10 @@ async def _get_adapter(
         adapter = MGMTBluetoothCtl(hci_name, mac, MGMT_PROTOCOL_TIMEOUT)
         await adapter.setup()
         _LOGGER.debug(
-            "_get_adapter: %s (hci_name=%s) (idx=%s)",
+            "_get_adapter: %s (hci_name=%s) (mac=%s) (idx=%s)",
             name,
             adapter.hci_name,
+            adapter.mac,
             adapter.idx,
         )
         yield adapter
