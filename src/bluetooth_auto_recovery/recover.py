@@ -160,7 +160,8 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         """Send command."""
         pkt_objs = btmgmt_protocol.command(*args)
         self.future = self.loop.create_future()
-        assert self.transport is not None  # nosec
+        if self.transport is None:
+            raise btmgmt_socket.BluetoothSocketError("Connection was closed")
         self.transport.write(b"".join(frame.octets for frame in pkt_objs if frame))
         cancel_timeout = self.loop.call_later(
             self.timeout, self._timeout_future, self.future
