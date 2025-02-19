@@ -357,18 +357,23 @@ async def _check_or_unblock_rfkill(hci: int) -> bool:
     could not be determined.
     """
     rfkill_info = await _check_rfkill(hci)
-    if rfkill_info.idx:
+    if rfkill_info.idx is not None:
         _LOGGER.debug("rfkill_idx of hci%i is %s", hci, rfkill_info.idx)
 
     if rfkill_info.hard_block:
-        _LOGGER.warning("Bluetooth adapter hci%i is hard blocked by rfkill!", hci)
+        _LOGGER.warning(
+            "Bluetooth adapter hci%i is hard blocked by rfkill: %s", hci, rfkill_info
+        )
         return False
 
     if not rfkill_info.soft_block:
+        _LOGGER.debug(
+            "Bluetooth adapter hci%i is soft blocked by rfkill: %s", hci, rfkill_info
+        )
         return True
 
-    if not rfkill_info.idx:
-        _LOGGER.debug("Could not determine rfkill_idx of hci%i", hci)
+    if rfkill_info.idx is None:
+        _LOGGER.debug("Could not determine rfkill_idx of hci%i: %s", hci, rfkill_info)
         return True
 
     _LOGGER.debug(
