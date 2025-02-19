@@ -417,7 +417,10 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
         adapter.name,
     )
     await _unblock_rfkill(adapter, rfkill_info.idx)
-    # Give Dbus some time to catch up
+    # Give kernel some time to catch up
+    _LOGGER.debug(
+        "Waiting %ss for kernel catch up after rfkill unblock", DBUS_REGISTER_TIME
+    )
     await asyncio.sleep(DBUS_REGISTER_TIME)
 
     rfkill_info = await _check_rfkill(adapter)
@@ -470,6 +473,10 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
         if await _power_cycle_adapter(adapter):
             # Give Dbus some time to catch up
+            _LOGGER.debug(
+                "Waiting %ss for kernel and Dbus to catch up after successful power cycle",
+                DBUS_REGISTER_TIME,
+            )
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
 
@@ -478,6 +485,10 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
         # Give Dbus some time to catch up in case
         # the adapter is going to move to a new hci number.
+        _LOGGER.debug(
+            "Waiting %ss for kernel and Dbus to catch up after successful USB reset",
+            DBUS_REGISTER_TIME,
+        )
         await asyncio.sleep(DBUS_REGISTER_TIME)
 
     # We just did a USB reset which may cause the adapter
@@ -503,8 +514,6 @@ async def recover_adapter(hci: int, mac: str) -> bool:
             )
             return False
 
-    # Give Dbus some time to catch up
-    await asyncio.sleep(DBUS_REGISTER_TIME)
     return True
 
 
