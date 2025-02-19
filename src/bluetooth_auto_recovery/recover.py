@@ -720,6 +720,10 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         if ex.errno == errno.EINPROGRESS:
             _LOGGER.debug("Adapter %s is already up", adapter.name)
             return True
+        _LOGGER.warning(
+            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
+        )
+        return False
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.warning(
             "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
