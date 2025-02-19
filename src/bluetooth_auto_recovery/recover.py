@@ -238,7 +238,9 @@ class MGMTBluetoothCtl:
                     self.idx = adapter["dev_id"]
                     self.hci_name = adapter["name"]
                     _LOGGER.debug(
-                        "Found adapter %s in hci device as %s", self.mac, self.idx
+                        "Found adapter %s by mac in hci device as %s",
+                        self.mac,
+                        self.idx,
                     )
                     return
 
@@ -247,7 +249,7 @@ class MGMTBluetoothCtl:
                     self.idx = adapter["dev_id"]
                     self.hci_name = adapter["name"]
                     _LOGGER.debug(
-                        "Found adapter %s as hci device %s as %s",
+                        "Found adapter %s by name as hci device %s as %s",
                         self.mac,
                         self._expected_hci_name,
                         self.idx,
@@ -274,6 +276,9 @@ class MGMTBluetoothCtl:
             short_name = response.short_name
             self.presented_list[idx] = mac
             if self.mac == mac:
+                _LOGGER.debug(
+                    "Found adapter %s by mac by reading controller info %s", mac, idx
+                )
                 self.idx = idx
                 self.hci_name = f"hci{short_name}"
                 return
