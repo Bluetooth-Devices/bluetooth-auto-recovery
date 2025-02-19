@@ -51,7 +51,7 @@ class RFKillInfo:
     idx: int | None
 
 
-def rfkill_unblock(hci: int, rfkill_idx: int) -> bool:
+def rfkill_unblock(hci_name: str, rfkill_idx: int) -> bool:
     """Try to remove an rfkill soft block."""
     try:
         with open(rfkill.dpath, "wb") as fout:
@@ -62,43 +62,42 @@ def rfkill_unblock(hci: int, rfkill_idx: int) -> bool:
             )
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception(
-            "RF kill switch unblock of hci%i (rfkill_idx:%s) failed", hci, rfkill_idx
+            "RF kill switch unblock of %s (rfkill_idx:%s) failed", hci_name, rfkill_idx
         )
         return False
 
     return True
 
 
-def rfkill_list_bluetooth(hci: int) -> RFKillInfo:
+def rfkill_list_bluetooth(hci_name: str) -> RFKillInfo:
     """Execute the rfkill list bluetooth command."""
-    hci_idx = f"hci{hci}"
     try:
         rfkill_dict = rfkill.rfkill_list()
     except FileNotFoundError as ex:
         _LOGGER.debug(
             "rfkill at /dev/rfkill is not accessible, cannot check bluetooth adapter %s: %s",
-            hci_idx,
+            hci_name,
             ex,
         )
         return RFKillInfo(None, None, None)
     except IndexError as ex:
         _LOGGER.debug(
             "rfkill at /dev/rfkill returned unexpected results, cannot check bluetooth adapter %s: %s",
-            hci_idx,
+            hci_name,
             ex,
         )
         return RFKillInfo(None, None, None)
     except PermissionError as ex:
         _LOGGER.debug(
             "Access to rfkill at /dev/rfkill is not permitted, cannot check bluetooth adapter %s: %s",
-            hci_idx,
+            hci_name,
             ex,
         )
         return RFKillInfo(None, None, None)
     except UnicodeDecodeError as ex:
         _LOGGER.debug(
             "RF kill switch check failed - data for %s is not UTF-8 encoded: %s",
-            hci_idx,
+            hci_name,
             ex,
         )
         return RFKillInfo(None, None, None)
@@ -106,11 +105,11 @@ def rfkill_list_bluetooth(hci: int) -> RFKillInfo:
         _LOGGER.exception("RF kill switch check failed")
         return RFKillInfo(None, None, None)
     try:
-        rfkill_hci_state = rfkill_dict[hci_idx]
+        rfkill_hci_state = rfkill_dict[hci_name]
     except KeyError:
         _LOGGER.debug(
             "RF kill switch check failed - no data for %s. Available data: %s",
-            hci_idx,
+            hci_name,
             rfkill_dict,
         )
         return RFKillInfo(None, None, None)
@@ -183,11 +182,14 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 class MGMTBluetoothCtl:
     """Class to control interfaces using the BlueZ management API"""
 
-    def __init__(self, hci: int, mac: str, timeout: float) -> None:
+    def __init__(self, hci_name: str, mac: str, timeout: float) -> None:
         """Initialize the control class."""
+        # These get set when we enumerate the controllers
         self.idx: int | None = None
+        self.hci_name: str | None = None
+
         self.mac = mac
-        self._expected_hci = hci
+        self._expected_hci_name = hci_name
         self.timeout = timeout
         self.protocol: BluetoothMGMTProtocol | None = None
         self.presented_list: dict[int, str] = {}
@@ -234,19 +236,20 @@ class MGMTBluetoothCtl:
             for adapter in adapters_from_hci.values():
                 if adapter["bdaddr"] == self.mac.upper():
                     self.idx = adapter["dev_id"]
+                    self.hci_name = adapter["name"]
                     _LOGGER.debug(
                         "Found adapter %s in hci device as %s", self.mac, self.idx
                     )
                     return
 
             for adapter in adapters_from_hci.values():
-                expected_hci_name = f"hci{self._expected_hci}"
-                if adapter["name"] == expected_hci_name:
+                if adapter["name"] == self._expected_hci_name:
                     self.idx = adapter["dev_id"]
+                    self.hci_name = adapter["name"]
                     _LOGGER.debug(
                         "Found adapter %s as hci device %s as %s",
                         self.mac,
-                        self._expected_hci,
+                        self._expected_hci_name,
                         self.idx,
                     )
                     return
@@ -262,6 +265,7 @@ class MGMTBluetoothCtl:
             _LOGGER.warning("There are no BT controllers present in the system!")
             return
         hci_idx_list = getattr(idxdata.cmd_response_frame, "controller_index[i]")
+        _LOGGER.debug("hci_idx_list: %s", hci_idx_list)
         for idx in hci_idx_list:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug(hci_info)
@@ -270,15 +274,16 @@ class MGMTBluetoothCtl:
             if self.mac == mac:
                 self.idx = idx
                 return
-        if not self.idx and self._expected_hci in self.presented_list:
+        if not self.idx and self._expected_hci_name in self.presented_list:
             _LOGGER.warning(
                 "The mac address %s was not found in the adapter list: %s, "
                 "falling back to matching by hci%i",
                 self.mac,
                 self.presented_list,
-                self._expected_hci,
+                self._expected_hci_name,
             )
-            self.idx = self._expected_hci
+            self.hci_name = self._expected_hci_name
+            self.idx = list(self.presented_list.keys())[0]
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
@@ -317,32 +322,34 @@ class MGMTBluetoothCtl:
             return current_state
 
 
-async def _check_rfkill(hci: int) -> RFKillInfo:
+async def _check_rfkill(hci_name: str) -> RFKillInfo:
     """Check if rfkill is blocked."""
     loop = asyncio.get_running_loop()
     try:
         async with asyncio_timeout(MAX_RFKILL_TIME):
-            return await loop.run_in_executor(None, rfkill_list_bluetooth, hci)
+            return await loop.run_in_executor(None, rfkill_list_bluetooth, hci_name)
     except asyncio.TimeoutError:
         _LOGGER.warning(
-            "Checking rfkill for hci%i timed out after %s seconds!",
-            hci,
+            "Checking rfkill for %s timed out after %s seconds!",
+            hci_name,
             MAX_RFKILL_TIME,
         )
 
     return RFKillInfo(None, None, None)
 
 
-async def _unblock_rfkill(hci: int, rfkill_idx: int) -> bool:
+async def _unblock_rfkill(hci_name: str, rfkill_idx: int) -> bool:
     """Try to unblock an adapter."""
     loop = asyncio.get_running_loop()
     try:
         async with asyncio_timeout(MAX_RFKILL_TIME):
-            return await loop.run_in_executor(None, rfkill_unblock, hci, rfkill_idx)
+            return await loop.run_in_executor(
+                None, rfkill_unblock, hci_name, rfkill_idx
+            )
     except asyncio.TimeoutError:
         _LOGGER.warning(
-            "Unblocking rfkill for hci%i with idx:%s timed out after %s seconds!",
-            hci,
+            "Unblocking rfkill for %s with idx:%s timed out after %s seconds!",
+            hci_name,
             rfkill_idx,
             MAX_RFKILL_TIME,
         )
@@ -350,79 +357,82 @@ async def _unblock_rfkill(hci: int, rfkill_idx: int) -> bool:
     return False
 
 
-async def _check_or_unblock_rfkill(hci: int) -> bool:
+async def _check_or_unblock_rfkill(hci_name: str) -> bool:
     """Check if rfkill is blocked, and try to unblock if possible.
 
     Returns False if the adapter is blocked or the state
     could not be determined.
     """
-    rfkill_info = await _check_rfkill(hci)
+    rfkill_info = await _check_rfkill(hci_name)
     if rfkill_info.idx is not None:
-        _LOGGER.debug("rfkill_idx of hci%i is %s", hci, rfkill_info.idx)
+        _LOGGER.debug("rfkill_idx of %s is %s", hci_name, rfkill_info.idx)
 
     if rfkill_info.hard_block:
         _LOGGER.warning(
-            "Bluetooth adapter hci%i is hard blocked by rfkill: %s", hci, rfkill_info
+            "Bluetooth adapter %s is hard blocked by rfkill: %s", hci_name, rfkill_info
         )
         return False
 
     if not rfkill_info.soft_block:
         _LOGGER.debug(
-            "Bluetooth adapter hci%i is soft blocked by rfkill: %s", hci, rfkill_info
+            "Bluetooth adapter %s is soft blocked by rfkill: %s", hci_name, rfkill_info
         )
         return True
 
     if rfkill_info.idx is None:
-        _LOGGER.debug("Could not determine rfkill_idx of hci%i: %s", hci, rfkill_info)
+        _LOGGER.debug("Could not determine rfkill_idx of %s: %s", hci_name, rfkill_info)
         return True
 
     _LOGGER.debug(
-        "Bluetooth adapter hci%i is soft blocked by rfkill; trying to unblock", hci
+        "Bluetooth adapter %s is soft blocked by rfkill; trying to unblock", hci_name
     )
-    await _unblock_rfkill(hci, rfkill_info.idx)
+    await _unblock_rfkill(hci_name, rfkill_info.idx)
     # Give Dbus some time to catch up
     await asyncio.sleep(DBUS_REGISTER_TIME)
 
-    rfkill_info = await _check_rfkill(hci)
+    rfkill_info = await _check_rfkill(hci_name)
     if rfkill_info.soft_block or rfkill_info.hard_block:
         _LOGGER.warning(
-            "Bluetooth adapter hci%i is blocked by rfkill and could not be unblocked",
-            hci,
+            "Bluetooth adapter %s is blocked by rfkill and could not be unblocked",
+            hci_name,
         )
         return False
 
-    _LOGGER.debug("Bluetooth adapter hci%i was successfully unblocked", hci)
+    _LOGGER.debug("Bluetooth adapter %s was successfully unblocked", hci_name)
     return True
 
 
 async def recover_adapter(hci: int, mac: str) -> bool:
     """Reset the bluetooth adapter."""
     mac = mac.upper()
+    hci_name = f"hci{hci}"
     _LOGGER.debug(
-        "Attempting to recover bluetooth adapter hci%i with mac address %s", hci, mac
+        "Attempting to recover bluetooth adapter %s with mac address %s", hci_name, mac
     )
-    async with _get_adapter(hci, mac) as adapter:
+    async with _get_adapter(hci_name, mac) as adapter:
         if not adapter:
             _LOGGER.warning(
-                "Could not find adapter with mac address %s or hci%i", mac, hci
+                "Could not find adapter with mac address %s or %s", mac, hci_name
             )
             return False
 
-        if adapter and adapter.idx is not None and adapter.idx != hci:
-            hci = adapter.idx
+        if adapter and adapter.hci_name is not None and adapter.hci_name != hci_name:
+            hci_name = adapter.hci_name
             _LOGGER.warning(
-                "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
+                "Adapter with mac address %s has moved to %s", mac, hci_name
             )
 
-        if not await _check_or_unblock_rfkill(hci):
-            _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
+        if not await _check_or_unblock_rfkill(hci_name):
+            _LOGGER.warning(
+                "rfkill has blocked %s, and could not be unblocked", hci_name
+            )
 
         if adapter and await _power_cycle_adapter(adapter):
             # Give Dbus some time to catch up
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
 
-        if not await _usb_reset_adapter(hci):
+        if not await _usb_reset_adapter(hci_name):
             return False
 
         # Give Dbus some time to catch up in case
@@ -431,23 +441,25 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
     # We just did a USB reset which may cause the adapter
     # to move to a different hci number. Try to find it again.
-    async with _get_adapter(hci, mac) as adapter:
+    async with _get_adapter(hci_name, mac) as adapter:
         if not adapter:
             _LOGGER.warning(
-                "Could not find adapter with mac address %s or hci%i", mac, hci
+                "Could not find adapter with mac address %s or %s", mac, hci_name
             )
             return False
 
-        if adapter and adapter.idx is not None and adapter.idx != hci:
-            hci = adapter.idx
+        if adapter and adapter.hci_name is not None and adapter.hci_name != hci_name:
+            hci_name = adapter.hci_name
             _LOGGER.warning(
-                "Adapter with mac address %s has moved to hci%i", mac, adapter.idx
+                "Adapter with mac address %s has moved to %s", mac, hci_name
             )
 
         # After the reset, rfkill may be blocked so we need
         # to check and unblock it.
-        if not await _check_or_unblock_rfkill(hci):
-            _LOGGER.warning("rfkill has blocked hci%i, and could not be unblocked", hci)
+        if not await _check_or_unblock_rfkill(hci_name):
+            _LOGGER.warning(
+                "rfkill has blocked %s, and could not be unblocked", hci_name
+            )
             return False
 
     # Give Dbus some time to catch up
@@ -456,15 +468,17 @@ async def recover_adapter(hci: int, mac: str) -> bool:
 
 
 @asynccontextmanager
-async def _get_adapter(hci: int, mac: str) -> AsyncIterator[MGMTBluetoothCtl | None]:
+async def _get_adapter(
+    hci_name: str, mac: str
+) -> AsyncIterator[MGMTBluetoothCtl | None]:
     """Get the adapter."""
-    name = f"hci{hci} [{mac}]"
+    name = f"{hci_name} [{mac}]"
     _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
     adapter = None
     try:
-        adapter = MGMTBluetoothCtl(hci, mac, MGMT_PROTOCOL_TIMEOUT)
+        adapter = MGMTBluetoothCtl(hci_name, mac, MGMT_PROTOCOL_TIMEOUT)
         await adapter.setup()
-        _LOGGER.debug("hci%i (%s) idx is %s", hci, mac, adapter.idx)
+        _LOGGER.debug("%s (%s) idx is %s", adapter.hci_name, mac, adapter.idx)
         yield adapter
     except btmgmt_socket.BluetoothSocketError as ex:
         _LOGGER.warning(
@@ -513,8 +527,9 @@ async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
         return False
 
 
-async def _usb_reset_adapter(hci: int) -> bool:
+async def _usb_reset_adapter(hci_name: str) -> bool:
     """Reset the bluetooth adapter."""
+    hci = int(hci_name.removeprefix("hci"))
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
     try:
