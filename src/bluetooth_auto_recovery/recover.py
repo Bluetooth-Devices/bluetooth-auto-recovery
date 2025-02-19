@@ -717,7 +717,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     try:
         await _bounce_adapter_interface(adapter, down=False, up=True)
     except OSError as ex:
-        if ex.errno == errno.EINPROGRESS:
+        if ex.errno == errno.EALREADY:
             _LOGGER.debug("Adapter %s is already up", adapter.name)
             return True
         _LOGGER.warning(
