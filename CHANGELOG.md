@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.3 (2025-02-19)
+
+### Fix
+
+* Rfkill unblocking when adapter idx is 0 ([#78](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/78)) ([`f6dbba0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/f6dbba060307aca0657ce6a967153c2e373b6aaa))
+
 ## v1.4.2 (2024-04-25)
 
 ### Fix
