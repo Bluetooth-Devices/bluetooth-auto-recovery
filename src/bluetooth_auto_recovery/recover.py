@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import array
 import asyncio
+import errno
 import logging
 import socket
 import struct
@@ -715,6 +716,10 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
 
     try:
         await _bounce_adapter_interface(adapter, down=False, up=True)
+    except OSError as ex:
+        if ex.errno == errno.EINPROGRESS:
+            _LOGGER.debug("Adapter %s is already up", adapter.name)
+            return True
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.warning(
             "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
