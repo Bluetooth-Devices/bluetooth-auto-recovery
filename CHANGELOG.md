@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.4 (2025-02-19)
+
+### Fix
+
+* Handle case where adapter moves to index 0 after USB reset ([#79](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/79)) ([`34517d3`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/34517d37e426cba26cceb0bcdc8da2f98e63610b))
+
 ## v1.4.3 (2025-02-19)
 
 ### Fix
