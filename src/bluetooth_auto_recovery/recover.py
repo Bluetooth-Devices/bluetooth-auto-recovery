@@ -269,21 +269,14 @@ class MGMTBluetoothCtl:
         for idx in hci_idx_list:
             hci_info = await self.protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug(hci_info)
-            mac = hci_info.cmd_response_frame.address
+            response = hci_info.cmd_response_frame
+            mac = response.address
+            short_name = response.short_name
             self.presented_list[idx] = mac
             if self.mac == mac:
                 self.idx = idx
+                self.hci_name = f"hci{short_name}"
                 return
-        if not self.idx and self._expected_hci_name in self.presented_list:
-            _LOGGER.warning(
-                "The mac address %s was not found in the adapter list: %s, "
-                "falling back to matching by hci%i",
-                self.mac,
-                self.presented_list,
-                self._expected_hci_name,
-            )
-            self.hci_name = self._expected_hci_name
-            self.idx = list(self.presented_list.keys())[0]
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
