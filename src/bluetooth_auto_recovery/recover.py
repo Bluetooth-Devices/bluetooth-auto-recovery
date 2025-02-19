@@ -273,14 +273,13 @@ class MGMTBluetoothCtl:
             _LOGGER.debug(hci_info)
             response = hci_info.cmd_response_frame
             mac = response.address
-            short_name = response.short_name
             self.presented_list[idx] = mac
             if self.mac == mac:
                 _LOGGER.debug(
                     "Found adapter %s by mac by reading controller info %s", mac, idx
                 )
                 self.idx = idx
-                self.hci_name = f"hci{short_name}"
+                self.hci_name = f"hci{idx}"
                 return
 
     async def get_powered(self) -> bool | None:
