@@ -657,6 +657,7 @@ async def _bounce_adapter_interface(
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
+    timed_out_getting_powered: bool = False
     power_state_before_reset: bool | None = None
     try:
         power_state_before_reset = await adapter.get_powered()
@@ -672,25 +673,30 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             adapter.name,
             adapter.timeout,
         )
+        timed_out_getting_powered = True
     except Exception:  # pylint: disable=broad-except
         _LOGGER.exception(
             "Could not determine the power state of the Bluetooth adapter %s: %s",
             adapter.name,
         )
 
-    try:
-        await _execute_power_off(adapter, power_state_before_reset)
-    except asyncio.TimeoutError:
-        _LOGGER.warning(
-            "Could not reset the power state of the Bluetooth adapter %s due to timeout after %s seconds",
-            adapter.name,
-            adapter.timeout,
-        )
-    except Exception:
-        _LOGGER.exception(
-            "Could not reset the power state of the Bluetooth adapter %s",
-            adapter.name,
-        )
+    # Do not attempt to power off if it timed out getting the power state
+    # as it likely means the adapter interface is frozen and will not respond to
+    # power off commands so we need to proceed to bounce the interface
+    if not timed_out_getting_powered:
+        try:
+            await _execute_power_off(adapter, power_state_before_reset)
+        except asyncio.TimeoutError:
+            _LOGGER.warning(
+                "Could not reset the power state of the Bluetooth adapter %s due to timeout after %s seconds",
+                adapter.name,
+                adapter.timeout,
+            )
+        except Exception:
+            _LOGGER.exception(
+                "Could not reset the power state of the Bluetooth adapter %s",
+                adapter.name,
+            )
 
     try:
         await _bounce_adapter_interface(adapter, down=True, up=True)
