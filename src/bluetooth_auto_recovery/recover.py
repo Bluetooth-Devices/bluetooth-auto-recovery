@@ -761,7 +761,7 @@ async def _execute_power_on(
     # Check the state after the reset
     if pstate_after is True:
         if power_state_before_reset is False:
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "Bluetooth adapter %s successfully turned back ON", adapter.name
             )
         else:
