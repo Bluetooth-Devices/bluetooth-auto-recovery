@@ -2,6 +2,12 @@
 
 <!--next-version-placeholder-->
 
+## v1.4.5 (2025-03-13)
+
+### Fix
+
+* Downgrade power on success log message to debug ([#83](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/issues/83)) ([`da6ca83`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/da6ca83c1c55b4c154b46b18afacbf3ab7d9b063))
+
 ## v1.4.4 (2025-02-19)
 
 ### Fix
