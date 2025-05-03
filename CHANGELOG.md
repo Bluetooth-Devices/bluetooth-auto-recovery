@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v1.5.1 (2025-05-03)
+
+### Bug Fixes
+
+- Ensure public signature includes gone_silent
+  ([#92](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/92),
+  [`176502b`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/176502b2d5e64d798b9f7979df29f5007e18d561))
+
+
 ## v1.5.0 (2025-05-03)
 
 ### Chores

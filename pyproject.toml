@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "bluetooth-auto-recovery"
-version = "1.5.0"
+version = "1.5.1"
 description = "Recover bluetooth adapters that are in an stuck state"
 authors = ["J. Nick Koston <nick@koston.org>"]
 license = "MIT"
