@@ -435,12 +435,15 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     return True
 
 
-async def recover_adapter(hci: int, mac: str) -> bool:
+async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:
     """Reset the bluetooth adapter."""
     mac = mac.upper()
     hci_name = f"hci{hci}"
     _LOGGER.debug(
-        "Attempting to recover bluetooth adapter %s with mac address %s", hci_name, mac
+        "Attempting to recover bluetooth adapter %s with mac address %s (gone_silent=%s)",
+        hci_name,
+        mac,
+        gone_silent,
     )
     async with _get_adapter(hci_name, mac) as adapter:
         if (
@@ -471,7 +474,8 @@ async def recover_adapter(hci: int, mac: str) -> bool:
                 "rfkill has blocked %s, and could not be unblocked", adapter.name
             )
 
-        if await _power_cycle_adapter(adapter):
+        # If the adapter has gone silent, do the USB reset as well
+        if await _power_cycle_adapter(adapter) and not gone_silent:
             # Give Dbus some time to catch up
             _LOGGER.debug(
                 "Waiting %ss for kernel and Dbus to catch up after successful power cycle",
