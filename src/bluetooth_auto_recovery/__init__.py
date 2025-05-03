@@ -10,7 +10,7 @@ from types import ModuleType
 _MODULE_CACHE: dict[str, ModuleType] = {}
 
 
-async def recover_adapter(hci: int, mac: str) -> bool:
+async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:
     """Recover the Bluetooth adapter with the given HCI and MAC address.
 
     This function is a wrapper that late imports
@@ -28,7 +28,7 @@ async def recover_adapter(hci: int, mac: str) -> bool:
         this_module = sys.modules[__package__]
         this_module.recover_adapter = recover_module.recover_adapter  # type: ignore
 
-    return await recover_module.recover_adapter(hci, mac)
+    return await recover_module.recover_adapter(hci, mac, gone_silent)
 
 
 __all__ = ["recover_adapter"]
