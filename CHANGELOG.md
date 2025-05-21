@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v1.5.2 (2025-05-21)
+
+### Bug Fixes
+
+- Update poetry to v2 ([#95](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/95),
+  [`5902b0c`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/5902b0c5a9bcaae2db7c16964be88314f3952ba7))
+
+### Chores
+
+- **pre-commit.ci**: Pre-commit autoupdate
+  ([#93](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/93),
+  [`d8a9cc3`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/d8a9cc3d08b90d239411867655d6621fd378c63b))
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+
+
 ## v1.5.1 (2025-05-03)
 
 ### Bug Fixes
