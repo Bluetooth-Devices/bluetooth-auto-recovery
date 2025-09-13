@@ -127,7 +127,10 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
     """Bluetooth MGMT protocol."""
 
     def __init__(
-        self, timeout: float, connection_mode_future: asyncio.Future[None]
+        self,
+        timeout: float,
+        connection_mode_future: asyncio.Future[None],
+        sock: socket.socket,
     ) -> None:
         """Initialize the protocol."""
         self.future: asyncio.Future[btmgmt_protocol.Response] | None = None
@@ -135,6 +138,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         self.timeout = timeout
         self.connection_mode_future = connection_mode_future
         self.loop = asyncio.get_running_loop()
+        self.sock = sock
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         """Handle connection made."""
@@ -163,7 +167,14 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         self.future = self.loop.create_future()
         if self.transport is None:
             raise btmgmt_socket.BluetoothSocketError("Connection was closed")
-        self.transport.write(b"".join(frame.octets for frame in pkt_objs if frame))
+        # Write directly to the socket to work around kernel ABI inconsistency
+        # where sendto() may return 0 on certain systems (e.g., Odroid M1 with kernel 6.12.43-haos)
+        # even though data was successfully sent. Using transport.write() can cause
+        # infinite retries in asyncio's transport layer.
+        # See: https://github.com/Bluetooth-Devices/habluetooth/pull/303
+        # See: https://github.com/home-assistant/core/issues/152204
+        data = b"".join(frame.octets for frame in pkt_objs if frame)
+        self.sock.send(data)
         cancel_timeout = self.loop.call_later(
             self.timeout, self._timeout_future, self.future
         )
@@ -218,7 +229,8 @@ class MGMTBluetoothCtl:
 
     async def setup(self) -> None:
         """Set up management interface."""
-        self.sock = btmgmt_socket.open()
+        sock = btmgmt_socket.open()
+        self.sock = sock
         loop = asyncio.get_running_loop()
         connection_made_future: asyncio.Future[None] = loop.create_future()
         try:
@@ -226,14 +238,16 @@ class MGMTBluetoothCtl:
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
                 _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
-                    self.sock,
-                    lambda: BluetoothMGMTProtocol(self.timeout, connection_made_future),
+                    sock,
+                    lambda: BluetoothMGMTProtocol(
+                        self.timeout, connection_made_future, sock
+                    ),
                     None,
                     None,
                 )
                 await connection_made_future
         except asyncio.TimeoutError:
-            btmgmt_socket.close(self.sock)
+            btmgmt_socket.close(sock)
             raise
         assert isinstance(protocol, BluetoothMGMTProtocol)  # nosec
         self.protocol = protocol
