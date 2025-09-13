@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v1.5.3 (2025-09-13)
+
+### Bug Fixes
+
+- Bluetooth management socket communication on certain kernels
+  ([#107](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/107),
+  [`4e5e994`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/4e5e994e7b9f2bda7a26037fcbc114091d1d138c))
+
+### Chores
+
+- **pre-commit.ci**: Pre-commit autoupdate
+  ([#94](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/94),
+  [`10815e0`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/10815e08ec975459bf75d85c69e0cc555f830758))
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+
+
 ## v1.5.2 (2025-05-21)
 
 ### Bug Fixes
