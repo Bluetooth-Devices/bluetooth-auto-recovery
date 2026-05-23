@@ -73,9 +73,24 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-[tool.isort]
-profile = "black"
-known_first_party = ["bluetooth_auto_recovery", "tests"]
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+]
+# E501 (line-too-long) is left to the formatter; unsplittable strings
+# (e.g. log messages) are intentionally allowed to exceed the line length.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bluetooth_auto_recovery", "tests"]
 
 [tool.mypy]
 check_untyped_defs = true
