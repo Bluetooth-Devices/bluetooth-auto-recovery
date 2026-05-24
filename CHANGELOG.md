@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v1.6.0 (2026-05-24)
+
+### Chores
+
+- **pre-commit.ci**: Pre-commit autoupdate
+  ([#108](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/108),
+  [`9dd8068`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/9dd8068424aad267543c7e2a27a1644335fc93f6))
+
+### Features
+
+- Drop Python 3.9 support
+  ([#120](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/pull/120),
+  [`b6f14f7`](https://github.com/Bluetooth-Devices/bluetooth-auto-recovery/commit/b6f14f739e2509f64d2f4d14b58545faa833d71d))
+
+Co-authored-by: pre-commit-ci[bot] <66853113+pre-commit-ci[bot]@users.noreply.github.com>
+
+
 ## v1.5.3 (2025-09-13)
 
 ### Bug Fixes
