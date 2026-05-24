@@ -5,7 +5,7 @@ description = "Recover bluetooth adapters that are in an stuck state"
 authors = [{ name = "J. Nick Koston", email = "nick@koston.org" }]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["classifiers", "dependencies"]
 
 [project.urls]
@@ -27,7 +27,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.14"
+python = ">=3.10,<3.14"
 
 # Documentation Dependencies
 Sphinx = {version = ">=5,<8", optional = true}
