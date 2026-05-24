@@ -700,8 +700,9 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
         )
         timed_out_getting_powered = True
     except Exception:  # pylint: disable=broad-except
+        # _LOGGER.exception already records the traceback, so no extra %s is needed.
         _LOGGER.exception(
-            "Could not determine the power state of the Bluetooth adapter %s: %s",
+            "Could not determine the power state of the Bluetooth adapter %s",
             adapter.name,
         )
 

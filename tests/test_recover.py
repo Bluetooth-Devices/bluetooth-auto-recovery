@@ -337,6 +337,16 @@ async def test_unblock_rfkill_success(adapter: MGMTBluetoothCtl) -> None:
         assert await recover._unblock_rfkill(adapter, 3) is True
 
 
+@pytest.mark.asyncio
+async def test_unblock_rfkill_timeout(adapter: MGMTBluetoothCtl) -> None:
+    with patch.object(
+        recover, "rfkill_unblock", side_effect=lambda a, idx: _block_forever()
+    ):
+        # asyncio_timeout wraps the executor call; force it to expire fast.
+        with patch.object(recover, "MAX_RFKILL_TIME", 0.01):
+            assert await recover._unblock_rfkill(adapter, 3) is False
+
+
 # ---------------------------------------------------------------------------
 # _check_or_unblock_rfkill
 # ---------------------------------------------------------------------------
@@ -481,6 +491,19 @@ async def test_execute_power_on_success(adapter: MGMTBluetoothCtl) -> None:
     ):
         assert (
             await recover._execute_power_on(adapter, power_state_before_reset=False)
+            is True
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_power_on_was_already_on(adapter: MGMTBluetoothCtl) -> None:
+    # power_state_before_reset is True: takes the "is ON after power cycle" branch.
+    with (
+        patch.object(adapter, "set_powered", AsyncMock(return_value=True)),
+        patch.object(adapter, "wait_for_power_state", AsyncMock(return_value=True)),
+    ):
+        assert (
+            await recover._execute_power_on(adapter, power_state_before_reset=True)
             is True
         )
 
@@ -703,6 +726,90 @@ async def test_execute_reset_final_bounce_oserror(adapter: MGMTBluetoothCtl) -> 
         assert await recover._execute_reset(adapter) is False
 
 
+@pytest.mark.asyncio
+async def test_execute_reset_final_bounce_unexpected_error(
+    adapter: MGMTBluetoothCtl,
+) -> None:
+    # A non-OSError raised by the final bounce is swallowed and fails the reset.
+    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+        if down is False and up is True:
+            raise RuntimeError("boom")
+
+    with (
+        patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
+        patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
+    ):
+        assert await recover._execute_reset(adapter) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [AttributeError("gone"), RuntimeError("unexpected")])
+async def test_execute_reset_get_powered_error_continues(
+    adapter: MGMTBluetoothCtl, exc: Exception
+) -> None:
+    # If reading the initial power state fails (but does not time out), the reset
+    # still proceeds: power-off is attempted, then bounce + power-on decide.
+    power_off = AsyncMock(return_value=True)
+    with (
+        patch.object(adapter, "get_powered", AsyncMock(side_effect=exc)),
+        patch.object(recover, "_execute_power_off", power_off),
+        patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
+        patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
+    ):
+        assert await recover._execute_reset(adapter) is True
+    power_off.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [asyncio.TimeoutError(), RuntimeError("boom")])
+async def test_execute_reset_power_off_error_is_swallowed(
+    adapter: MGMTBluetoothCtl, exc: Exception
+) -> None:
+    # Failures while powering off are swallowed; the reset proceeds to bounce/power-on.
+    with (
+        patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock(side_effect=exc)),
+        patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
+        patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
+    ):
+        assert await recover._execute_reset(adapter) is True
+
+
+@pytest.mark.asyncio
+async def test_execute_reset_first_bounce_error_is_swallowed(
+    adapter: MGMTBluetoothCtl,
+) -> None:
+    # The down/up bounce before power-on is best-effort: a failure does not abort.
+    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+        if down is True:
+            raise OSError(errno.EIO, "io error")
+
+    with (
+        patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
+        patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
+    ):
+        assert await recover._execute_reset(adapter) is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exc", [asyncio.TimeoutError(), RuntimeError("boom")])
+async def test_execute_reset_power_on_error_fails(
+    adapter: MGMTBluetoothCtl, exc: Exception
+) -> None:
+    # A timeout or unexpected error while powering back on fails the reset.
+    with (
+        patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
+        patch.object(recover, "_execute_power_on", AsyncMock(side_effect=exc)),
+    ):
+        assert await recover._execute_reset(adapter) is False
+
+
 # ---------------------------------------------------------------------------
 # raw_open / raw_close
 # ---------------------------------------------------------------------------
@@ -789,6 +896,21 @@ async def test_get_adapter_timeout_logs_timeout_message(
         async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
             assert got is None
     assert "due to timeout" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_get_adapter_close_failure_is_swallowed() -> None:
+    # A failure closing the adapter in the finally block must not propagate.
+    ctl = MagicMock()
+    ctl.idx = 0
+    ctl.hci_name = "hci0"
+    ctl.mac = "AA:BB:CC:DD:EE:FF"
+    ctl.setup = AsyncMock()
+    ctl.close = AsyncMock(side_effect=OSError("close failed"))
+    with patch.object(recover, "MGMTBluetoothCtl", return_value=ctl):
+        async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
+            assert got is ctl
+    ctl.close.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
