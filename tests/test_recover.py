@@ -1136,3 +1136,27 @@ async def test_recover_adapter_post_reset_rfkill_blocked() -> None:
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
         assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is False
+
+
+@pytest.mark.asyncio
+async def test_recover_adapter_post_reset_moved_hci() -> None:
+    # The USB reset moves the adapter to a new hci number: the post-reset
+    # lookup resolves it under hci1, and recovery still succeeds.
+    first = _resolved_adapter()
+    moved = MagicMock()
+    moved.idx = 1
+    moved.hci_name = "hci1"
+    moved.mac = "AA:BB:CC:DD:EE:FF"
+    moved.name = "hci1 [AA:BB:CC:DD:EE:FF] (1)"
+    with (
+        patch.object(
+            recover,
+            "_get_adapter",
+            side_effect=[adapter_cm(first), adapter_cm(moved)],
+        ),
+        patch.object(recover, "_check_or_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover, "_power_cycle_adapter", AsyncMock(return_value=False)),
+        patch.object(recover, "_usb_reset_adapter", AsyncMock(return_value=True)),
+        patch.object(recover.asyncio, "sleep", AsyncMock()),
+    ):
+        assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is True
