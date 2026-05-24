@@ -463,8 +463,6 @@ async def test_usb_reset_success(adapter: MGMTBluetoothCtl) -> None:
 @pytest.mark.parametrize(
     "exc",
     [
-        recover.NotAUSBDeviceError(),
-        FileNotFoundError(),
         PermissionError(2, "denied", "/dev/foo"),
         RuntimeError("unexpected"),
     ],
@@ -476,6 +474,25 @@ async def test_usb_reset_handles_errors(
     dev.async_reset = AsyncMock(side_effect=exc)
     with patch.object(recover, "BluetoothDevice", return_value=dev):
         assert await recover._usb_reset_adapter(adapter) is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        recover.NotAUSBDeviceError(),
+        FileNotFoundError(),
+    ],
+)
+async def test_usb_reset_not_applicable_returns_none(
+    adapter: MGMTBluetoothCtl, exc: Exception
+) -> None:
+    # A non-USB adapter (no USB device behind the hci) is "not applicable",
+    # signalled by None — distinct from an attempted-but-failed USB reset.
+    dev = MagicMock()
+    dev.async_reset = AsyncMock(side_effect=exc)
+    with patch.object(recover, "BluetoothDevice", return_value=dev):
+        assert await recover._usb_reset_adapter(adapter) is None
 
 
 # ---------------------------------------------------------------------------
@@ -1149,6 +1166,40 @@ async def test_recover_adapter_gone_silent_forces_usb_reset() -> None:
             is True
         )
     usb_reset.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_recover_adapter_gone_silent_non_usb_power_cycle_ok() -> None:
+    # gone_silent forces a USB reset, but the adapter is not a USB device
+    # (USB reset returns None). The power cycle succeeded, so a non-USB adapter
+    # is still recovered and recover_adapter must report success.
+    ctl = _resolved_adapter()
+    with (
+        patch.object(recover, "_get_adapter", return_value=adapter_cm(ctl)),
+        patch.object(recover, "_check_or_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover, "_power_cycle_adapter", AsyncMock(return_value=True)),
+        patch.object(recover, "_usb_reset_adapter", AsyncMock(return_value=None)),
+        patch.object(recover.asyncio, "sleep", AsyncMock()),
+    ):
+        assert (
+            await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF", gone_silent=True)
+            is True
+        )
+
+
+@pytest.mark.asyncio
+async def test_recover_adapter_non_usb_power_cycle_failed() -> None:
+    # USB reset not applicable (None) AND the power cycle failed: nothing
+    # recovered the adapter, so recover_adapter must report failure.
+    ctl = _resolved_adapter()
+    with (
+        patch.object(recover, "_get_adapter", return_value=adapter_cm(ctl)),
+        patch.object(recover, "_check_or_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover, "_power_cycle_adapter", AsyncMock(return_value=False)),
+        patch.object(recover, "_usb_reset_adapter", AsyncMock(return_value=None)),
+        patch.object(recover.asyncio, "sleep", AsyncMock()),
+    ):
+        assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is False
 
 
 @pytest.mark.asyncio

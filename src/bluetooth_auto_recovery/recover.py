@@ -496,8 +496,9 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
                 "rfkill has blocked %s, and could not be unblocked", adapter.name
             )
 
-        # If the adapter has gone silent, do the USB reset as well
-        if await _power_cycle_adapter(adapter) and not gone_silent:
+        power_cycle_ok = await _power_cycle_adapter(adapter)
+        # If the adapter has not gone silent, a successful power cycle is enough.
+        if power_cycle_ok and not gone_silent:
             # Give Dbus some time to catch up
             _LOGGER.debug(
                 "Waiting %ss for kernel and Dbus to catch up after successful power cycle",
@@ -506,7 +507,24 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
 
-        if not await _usb_reset_adapter(adapter):
+        # The adapter has gone silent (or the power cycle failed), so escalate to
+        # a USB reset. This may also move the adapter to a new hci number.
+        usb_reset_result = await _usb_reset_adapter(adapter)
+        if usb_reset_result is None:
+            # A USB reset is not applicable because the adapter is not a USB
+            # device. A non-USB adapter (e.g. a built-in UART controller) can
+            # only be recovered by the power cycle, so fall back to its result
+            # rather than reporting a spurious failure.
+            if not power_cycle_ok:
+                return False
+            _LOGGER.debug(
+                "Adapter %s is not a USB device; relying on the successful "
+                "power cycle for recovery",
+                adapter.name,
+            )
+            await asyncio.sleep(DBUS_REGISTER_TIME)
+            return True
+        if not usb_reset_result:
             return False
 
         # Give Dbus some time to catch up in case
@@ -641,8 +659,13 @@ def hci_name_to_number(hci_name: str) -> int:
     return int(hci_name.removeprefix("hci"))
 
 
-async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool:
-    """Reset the bluetooth adapter."""
+async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool | None:
+    """Reset the bluetooth adapter via USB.
+
+    Returns True if the USB reset succeeded, False if a USB reset was attempted
+    but failed, and None if a USB reset is not applicable because the adapter is
+    not a USB device (e.g. a built-in UART controller).
+    """
     assert adapter.hci_name is not None  # nosec
     hci = hci_name_to_number(adapter.hci_name)
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
@@ -653,10 +676,10 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool:
         _LOGGER.debug(
             "hci%s is not a USB devices while attempting USB reset: %s", hci, ex
         )
-        return False
+        return None
     except FileNotFoundError as ex:
         _LOGGER.debug("hci%s not found while attempting USB reset: %s", hci, ex)
-        return False
+        return None
     except PermissionError as ex:
         _LOGGER.info(
             "hci%s permission denied to %s while attempting USB reset: %s",
