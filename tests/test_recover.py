@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import errno
+import logging
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -421,6 +422,20 @@ async def test_power_cycle_handles_errors(
         assert await recover._power_cycle_adapter(adapter) is False
 
 
+@pytest.mark.asyncio
+async def test_power_cycle_timeout_logs_timeout_message(
+    adapter: MGMTBluetoothCtl, caplog: pytest.LogCaptureFixture
+) -> None:
+    with (
+        patch.object(
+            recover, "_execute_reset", AsyncMock(side_effect=asyncio.TimeoutError())
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        assert await recover._power_cycle_adapter(adapter) is False
+    assert "due to timeout" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # _usb_reset_adapter
 # ---------------------------------------------------------------------------
@@ -758,6 +773,22 @@ async def test_get_adapter_yields_none_on_setup_error(exc: Exception) -> None:
     with patch.object(recover, "MGMTBluetoothCtl", return_value=ctl):
         async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
             assert got is None
+
+
+@pytest.mark.asyncio
+async def test_get_adapter_timeout_logs_timeout_message(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ctl = MagicMock()
+    ctl.setup = AsyncMock(side_effect=asyncio.TimeoutError())
+    ctl.close = AsyncMock()
+    with (
+        patch.object(recover, "MGMTBluetoothCtl", return_value=ctl),
+        caplog.at_level(logging.WARNING),
+    ):
+        async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
+            assert got is None
+    assert "due to timeout" in caplog.text
 
 
 # ---------------------------------------------------------------------------
