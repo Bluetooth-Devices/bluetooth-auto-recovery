@@ -6,7 +6,7 @@ import asyncio
 import errno
 import logging
 from typing import cast
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -1079,8 +1079,14 @@ async def test_recover_adapter_second_lookup_succeeds_after_retry() -> None:
     ):
         assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is True
 
-    # Two missed lookups -> two retry waits before the adapter is found.
-    sleep.assert_any_await(recover.POST_RESET_LOOKUP_RETRY_TIME)
+    # Exact sleep sequence: the post-USB-reset DBUS_REGISTER_TIME wait, then one
+    # POST_RESET_LOOKUP_RETRY_TIME wait per missed lookup (two misses here)
+    # before the adapter is found on the third attempt.
+    assert sleep.await_args_list == [
+        call(recover.DBUS_REGISTER_TIME),
+        call(recover.POST_RESET_LOOKUP_RETRY_TIME),
+        call(recover.POST_RESET_LOOKUP_RETRY_TIME),
+    ]
 
 
 @pytest.mark.asyncio
