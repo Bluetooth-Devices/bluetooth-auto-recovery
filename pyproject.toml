@@ -1,11 +1,11 @@
 [project]
 name = "bluetooth-auto-recovery"
-version = "1.5.3"
+version = "1.6.0"
 description = "Recover bluetooth adapters that are in an stuck state"
 authors = [{ name = "J. Nick Koston", email = "nick@koston.org" }]
 license = "MIT"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["classifiers", "dependencies"]
 
 [project.urls]
@@ -13,6 +13,7 @@ dynamic = ["classifiers", "dependencies"]
 "Documentation" = "https://bluetooth-auto-recovery.readthedocs.io"
 "Bug Tracker" = "https://github.com/bluetooth-devices/bluetooth-auto-recovery/issues"
 "Changelog" = "https://github.com/bluetooth-devices/bluetooth-auto-recovery/blob/main/CHANGELOG.md"
+
 
 [tool.poetry]
 classifiers = [
@@ -27,7 +28,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.14"
+python = ">=3.10,<3.14"
 
 # Documentation Dependencies
 Sphinx = {version = ">=5,<8", optional = true}
@@ -72,9 +73,24 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-[tool.isort]
-profile = "black"
-known_first_party = ["bluetooth_auto_recovery", "tests"]
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+]
+# E501 (line-too-long) is left to the formatter; unsplittable strings
+# (e.g. log messages) are intentionally allowed to exceed the line length.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bluetooth_auto_recovery", "tests"]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -98,6 +114,7 @@ allow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "docs.*"
 ignore_errors = true
+
 
 [build-system]
 requires = ["poetry-core>=2.1.0"]

@@ -20,7 +20,8 @@ except ImportError:
     ioctl = None  # type: ignore
     rfkill = None
 
-from typing import Any, AsyncIterator, cast
+from collections.abc import AsyncIterator
+from typing import Any, cast
 
 import pyric.net.wireless.rfkill_h as rfkh
 from bluetooth_adapters import get_adapters_from_hci
