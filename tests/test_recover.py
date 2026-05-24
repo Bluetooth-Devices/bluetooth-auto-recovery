@@ -395,14 +395,36 @@ async def test_check_or_unblock_soft_block_still_blocked(
     adapter: MGMTBluetoothCtl,
 ) -> None:
     blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
+    # Initial check + one re-check per poll attempt, all still blocked.
+    checks = [blocked] * (1 + recover.RFKILL_UNBLOCK_ATTEMPTS)
     with (
-        patch.object(
-            recover, "_check_rfkill", AsyncMock(side_effect=[blocked, blocked])
-        ),
+        patch.object(recover, "_check_rfkill", AsyncMock(side_effect=checks)),
         patch.object(recover, "_unblock_rfkill", AsyncMock(return_value=True)),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
         assert await recover._check_or_unblock_rfkill(adapter) is False
+
+
+@pytest.mark.asyncio
+async def test_check_or_unblock_soft_block_clears_on_later_attempt(
+    adapter: MGMTBluetoothCtl,
+) -> None:
+    """A block that clears after the first re-check still succeeds.
+
+    The old single fixed-wait implementation would have reported failure here;
+    polling tolerates the late unblock.
+    """
+    blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
+    cleared = RFKillInfo(soft_block=False, hard_block=False, idx=1)
+    check = AsyncMock(side_effect=[blocked, blocked, cleared])
+    with (
+        patch.object(recover, "_check_rfkill", check),
+        patch.object(recover, "_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover.asyncio, "sleep", AsyncMock()),
+    ):
+        assert await recover._check_or_unblock_rfkill(adapter) is True
+    # initial check + 2 poll re-checks (clears on the second)
+    assert check.await_count == 3
 
 
 # ---------------------------------------------------------------------------

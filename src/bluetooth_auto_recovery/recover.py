@@ -37,6 +37,11 @@ POWER_OFF_TIME = 2
 POWER_ON_TIME = 3
 MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 3.5
+# After an rfkill unblock the kernel clears the soft block asynchronously.
+# Poll for it instead of a single fixed wait: RFKILL_UNBLOCK_ATTEMPTS checks
+# spaced RFKILL_UNBLOCK_RETRY_TIME apart (>= the old DBUS_REGISTER_TIME grace).
+RFKILL_UNBLOCK_ATTEMPTS = 3
+RFKILL_UNBLOCK_RETRY_TIME = 1.5
 
 # A USB reset disconnects the adapter and forces a re-enumeration, after which
 # it must also re-register with BlueZ. On slower systems (e.g. Raspberry Pi /
@@ -439,22 +444,35 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
         adapter.name,
     )
     await _unblock_rfkill(adapter, rfkill_info.idx)
-    # Give kernel some time to catch up
-    _LOGGER.debug(
-        "Waiting %ss for kernel catch up after rfkill unblock", DBUS_REGISTER_TIME
-    )
-    await asyncio.sleep(DBUS_REGISTER_TIME)
 
-    rfkill_info = await _check_rfkill(adapter)
-    if rfkill_info.soft_block or rfkill_info.hard_block:
-        _LOGGER.warning(
-            "Bluetooth adapter %s is blocked by rfkill and could not be unblocked",
+    # The kernel does not clear the rfkill block synchronously. A single fixed
+    # wait is both wasteful when the block clears quickly and too short on slow
+    # systems (Pi/HA), where the adapter is still reported blocked after the
+    # wait and is then falsely declared "could not be unblocked". Poll instead:
+    # return as soon as the block clears, but keep checking up to
+    # RFKILL_UNBLOCK_ATTEMPTS times to tolerate a late unblock.
+    for attempt in range(1, RFKILL_UNBLOCK_ATTEMPTS + 1):
+        _LOGGER.debug(
+            "Waiting %ss for kernel to catch up after rfkill unblock of %s "
+            "(attempt %s/%s)",
+            RFKILL_UNBLOCK_RETRY_TIME,
             adapter.name,
+            attempt,
+            RFKILL_UNBLOCK_ATTEMPTS,
         )
-        return False
+        await asyncio.sleep(RFKILL_UNBLOCK_RETRY_TIME)
+        rfkill_info = await _check_rfkill(adapter)
+        if not rfkill_info.soft_block and not rfkill_info.hard_block:
+            _LOGGER.debug(
+                "Bluetooth adapter %s was successfully unblocked", adapter.name
+            )
+            return True
 
-    _LOGGER.debug("Bluetooth adapter %s was successfully unblocked", adapter.name)
-    return True
+    _LOGGER.warning(
+        "Bluetooth adapter %s is blocked by rfkill and could not be unblocked",
+        adapter.name,
+    )
+    return False
 
 
 async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:
