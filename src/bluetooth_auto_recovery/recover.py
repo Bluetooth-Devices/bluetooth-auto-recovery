@@ -566,11 +566,14 @@ async def _get_adapter(
             ex,
         )
         yield None
+    except asyncio.TimeoutError:
+        # On Python 3.11+ asyncio.TimeoutError is an alias of the builtin
+        # TimeoutError, which subclasses OSError, so this must precede the
+        # OSError handler or the timeout-specific message is never emitted.
+        _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
+        yield None
     except OSError as ex:
         _LOGGER.warning("Getting Bluetooth adapter %s failed: %s", name, ex)
-        yield None
-    except asyncio.TimeoutError:
-        _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
         yield None
     finally:
         if adapter:
@@ -592,15 +595,18 @@ async def _power_cycle_adapter(adapter: MGMTBluetoothCtl) -> bool:
             ex,
         )
         return False
-    except OSError as ex:
-        _LOGGER.warning("Bluetooth adapter %s could not be reset: %s", adapter.name, ex)
-        return False
     except asyncio.TimeoutError:
+        # On Python 3.11+ asyncio.TimeoutError is an alias of the builtin
+        # TimeoutError, which subclasses OSError, so this must precede the
+        # OSError handler or the timeout-specific message is never emitted.
         _LOGGER.warning(
             "Bluetooth adapter %s could not be reset due to timeout after %s seconds",
             adapter.name,
             adapter.timeout,
         )
+        return False
+    except OSError as ex:
+        _LOGGER.warning("Bluetooth adapter %s could not be reset: %s", adapter.name, ex)
         return False
 
 
