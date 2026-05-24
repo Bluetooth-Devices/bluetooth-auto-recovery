@@ -38,10 +38,11 @@ POWER_ON_TIME = 3
 MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 3.5
 # After an rfkill unblock the kernel clears the soft block asynchronously.
-# Poll for it instead of a single fixed wait: RFKILL_UNBLOCK_ATTEMPTS checks
-# spaced RFKILL_UNBLOCK_RETRY_TIME apart (>= the old DBUS_REGISTER_TIME grace).
-RFKILL_UNBLOCK_ATTEMPTS = 3
-RFKILL_UNBLOCK_RETRY_TIME = 1.5
+# Poll for it instead of a single fixed wait, bounded by RFKILL_UNBLOCK_GRACE_TIME
+# of wall-clock time (>= the old DBUS_REGISTER_TIME grace) and re-checking every
+# RFKILL_UNBLOCK_POLL_INTERVAL seconds.
+RFKILL_UNBLOCK_GRACE_TIME = 4.5
+RFKILL_UNBLOCK_POLL_INTERVAL = 1.5
 
 # A USB reset disconnects the adapter and forces a re-enumeration, after which
 # it must also re-register with BlueZ. On slower systems (e.g. Raspberry Pi /
@@ -449,24 +450,28 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     # wait is both wasteful when the block clears quickly and too short on slow
     # systems (Pi/HA), where the adapter is still reported blocked after the
     # wait and is then falsely declared "could not be unblocked". Poll instead:
-    # return as soon as the block clears, but keep checking up to
-    # RFKILL_UNBLOCK_ATTEMPTS times to tolerate a late unblock.
-    for attempt in range(1, RFKILL_UNBLOCK_ATTEMPTS + 1):
-        _LOGGER.debug(
-            "Waiting %ss for kernel to catch up after rfkill unblock of %s "
-            "(attempt %s/%s)",
-            RFKILL_UNBLOCK_RETRY_TIME,
-            adapter.name,
-            attempt,
-            RFKILL_UNBLOCK_ATTEMPTS,
-        )
-        await asyncio.sleep(RFKILL_UNBLOCK_RETRY_TIME)
-        rfkill_info = await _check_rfkill(adapter)
-        if not rfkill_info.soft_block and not rfkill_info.hard_block:
-            _LOGGER.debug(
-                "Bluetooth adapter %s was successfully unblocked", adapter.name
-            )
-            return True
+    # return as soon as the block clears, re-checking every
+    # RFKILL_UNBLOCK_POLL_INTERVAL seconds, with the whole poll bounded by
+    # RFKILL_UNBLOCK_GRACE_TIME of wall-clock time so the worst case stays
+    # capped regardless of how long each re-check takes.
+    try:
+        async with asyncio_timeout(RFKILL_UNBLOCK_GRACE_TIME):
+            while True:
+                rfkill_info = await _check_rfkill(adapter)
+                if not rfkill_info.soft_block and not rfkill_info.hard_block:
+                    _LOGGER.debug(
+                        "Bluetooth adapter %s was successfully unblocked",
+                        adapter.name,
+                    )
+                    return True
+                _LOGGER.debug(
+                    "Waiting %ss for kernel to catch up after rfkill unblock of %s",
+                    RFKILL_UNBLOCK_POLL_INTERVAL,
+                    adapter.name,
+                )
+                await asyncio.sleep(RFKILL_UNBLOCK_POLL_INTERVAL)
+    except asyncio.TimeoutError:
+        pass
 
     _LOGGER.warning(
         "Bluetooth adapter %s is blocked by rfkill and could not be unblocked",

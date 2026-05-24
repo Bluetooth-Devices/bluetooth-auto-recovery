@@ -395,12 +395,12 @@ async def test_check_or_unblock_soft_block_still_blocked(
     adapter: MGMTBluetoothCtl,
 ) -> None:
     blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
-    # Initial check + one re-check per poll attempt, all still blocked.
-    checks = [blocked] * (1 + recover.RFKILL_UNBLOCK_ATTEMPTS)
+    # Block never clears -> the poll runs until the wall-clock grace expires and
+    # then reports failure. Shrink the grace so the real timeout fires fast.
     with (
-        patch.object(recover, "_check_rfkill", AsyncMock(side_effect=checks)),
+        patch.object(recover, "_check_rfkill", AsyncMock(return_value=blocked)),
         patch.object(recover, "_unblock_rfkill", AsyncMock(return_value=True)),
-        patch.object(recover.asyncio, "sleep", AsyncMock()),
+        patch.object(recover, "RFKILL_UNBLOCK_GRACE_TIME", 0.05),
     ):
         assert await recover._check_or_unblock_rfkill(adapter) is False
 
