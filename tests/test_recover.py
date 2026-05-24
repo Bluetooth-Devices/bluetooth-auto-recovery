@@ -409,10 +409,12 @@ async def test_check_or_unblock_soft_block_still_blocked(
 async def test_check_or_unblock_soft_block_clears_on_later_attempt(
     adapter: MGMTBluetoothCtl,
 ) -> None:
-    """A block that clears after the first re-check still succeeds.
+    """A block that clears on the second poll re-check still succeeds.
 
-    The old single fixed-wait implementation would have reported failure here;
-    polling tolerates the late unblock.
+    The side-effect sequence is initial check (blocked) -> first poll re-check
+    (still blocked) -> second poll re-check (cleared), so the block clears on
+    the second re-check. The old single fixed-wait implementation would have
+    reported failure here; polling tolerates the late unblock.
     """
     blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
     cleared = RFKillInfo(soft_block=False, hard_block=False, idx=1)

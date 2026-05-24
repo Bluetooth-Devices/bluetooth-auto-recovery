@@ -454,11 +454,21 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     # RFKILL_UNBLOCK_POLL_INTERVAL seconds, with the whole poll bounded by
     # RFKILL_UNBLOCK_GRACE_TIME of wall-clock time so the worst case stays
     # capped regardless of how long each re-check takes.
+    #
+    # This is NOT a busy wait: each iteration sleeps for
+    # RFKILL_UNBLOCK_POLL_INTERVAL seconds with `await asyncio.sleep(...)`, and
+    # `_check_rfkill` runs in an executor under its own timeout, so the event
+    # loop is yielded for the entire duration of the poll.
     try:
         async with asyncio_timeout(RFKILL_UNBLOCK_GRACE_TIME):
             while True:
                 rfkill_info = await _check_rfkill(adapter)
-                if not rfkill_info.soft_block and not rfkill_info.hard_block:
+                # Require an explicit unblocked reading. A timed-out check
+                # returns RFKillInfo(None, None, None); `not None` is truthy, so
+                # treating None as "unblocked" would falsely report success on an
+                # unknown state. Keep polling until both blocks are explicitly
+                # False (or the grace expires and we report failure below).
+                if rfkill_info.soft_block is False and rfkill_info.hard_block is False:
                     _LOGGER.debug(
                         "Bluetooth adapter %s was successfully unblocked",
                         adapter.name,
