@@ -1032,19 +1032,55 @@ async def test_recover_adapter_gone_silent_forces_usb_reset() -> None:
 @pytest.mark.asyncio
 async def test_recover_adapter_second_lookup_fails() -> None:
     first = _resolved_adapter()
+    calls = {"n": 0}
+
+    def get_adapter(*_args: object, **_kwargs: object) -> object:
+        calls["n"] += 1
+        # First lookup (pre-reset) resolves; every post-reset lookup misses.
+        return adapter_cm(first if calls["n"] == 1 else None)
+
     with (
-        patch.object(
-            recover,
-            "_get_adapter",
-            side_effect=[adapter_cm(first), adapter_cm(None)],
-        ),
+        patch.object(recover, "_get_adapter", side_effect=get_adapter),
         patch.object(recover, "_check_or_unblock_rfkill", AsyncMock(return_value=True)),
         patch.object(recover, "_power_cycle_adapter", AsyncMock(return_value=False)),
         patch.object(recover, "_usb_reset_adapter", AsyncMock(return_value=True)),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
-        # USB reset succeeded but the adapter could not be re-found afterwards.
+        # USB reset succeeded but the adapter never reappears: every retry
+        # misses, so recovery is reported as failed only after exhausting them.
         assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is False
+
+    # Pre-reset lookup + one lookup per post-reset attempt.
+    assert calls["n"] == 1 + recover.POST_RESET_LOOKUP_ATTEMPTS
+
+
+@pytest.mark.asyncio
+async def test_recover_adapter_second_lookup_succeeds_after_retry() -> None:
+    # The adapter re-enumerates slowly after the USB reset: the first two
+    # post-reset lookups miss, then it reappears and recovery succeeds.
+    first = _resolved_adapter()
+    second = _resolved_adapter()
+    sleep = AsyncMock()
+    with (
+        patch.object(
+            recover,
+            "_get_adapter",
+            side_effect=[
+                adapter_cm(first),
+                adapter_cm(None),
+                adapter_cm(None),
+                adapter_cm(second),
+            ],
+        ),
+        patch.object(recover, "_check_or_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover, "_power_cycle_adapter", AsyncMock(return_value=False)),
+        patch.object(recover, "_usb_reset_adapter", AsyncMock(return_value=True)),
+        patch.object(recover.asyncio, "sleep", sleep),
+    ):
+        assert await recover.recover_adapter(0, "AA:BB:CC:DD:EE:FF") is True
+
+    # Two missed lookups -> two retry waits before the adapter is found.
+    sleep.assert_any_await(recover.POST_RESET_LOOKUP_RETRY_TIME)
 
 
 @pytest.mark.asyncio
