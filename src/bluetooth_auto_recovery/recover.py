@@ -4,33 +4,36 @@ from __future__ import annotations
 
 import array
 import asyncio
-import errno
-import logging
-import socket
-import struct
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from enum import Enum, auto
+import errno
 from functools import cached_property
+import logging
+from pathlib import Path
+import socket
+import struct
 
 try:
     from fcntl import ioctl
 
-    import pyric.utils.rfkill as rfkill
+    from pyric.utils import rfkill
 except ImportError:  # pragma: no cover - platform without pyric/fcntl
-    ioctl = None  # type: ignore
+    ioctl = None  # type: ignore[assignment]
     rfkill = None
 
-from collections.abc import AsyncIterator
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-import pyric.net.wireless.rfkill_h as rfkh
 from bluetooth_adapters import get_adapters_from_hci
 from btsocket import btmgmt_protocol, btmgmt_socket
 from btsocket.btmgmt_socket import AF_BLUETOOTH, BTPROTO_HCI
+import pyric.net.wireless.rfkill_h as rfkh
 from usb_devices import BluetoothDevice, NotAUSBDeviceError
 
 from .util import asyncio_timeout
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -79,7 +82,7 @@ class RFKillInfo:
 def rfkill_unblock(adapter: MGMTBluetoothCtl, rfkill_idx: int) -> bool:
     """Try to remove an rfkill soft block."""
     try:
-        with open(rfkill.dpath, "wb") as fout:
+        with Path(rfkill.dpath).open("wb") as fout:
             fout.write(
                 rfkh.rfkill_event(
                     rfkill_idx, rfkh.RFKILL_TYPE_ALL, rfkh.RFKILL_OP_CHANGE, 0, 0
@@ -167,7 +170,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         """Handle connection made."""
         if not self.connection_mode_future.done():
             self.connection_mode_future.set_result(None)
-        self.transport = cast(asyncio.Transport, transport)
+        self.transport = cast("asyncio.Transport", transport)
 
     def data_received(self, data: bytes) -> None:
         """Handle data received."""
@@ -189,7 +192,8 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         pkt_objs = btmgmt_protocol.command(*args)
         self.future = self.loop.create_future()
         if self.transport is None:
-            raise btmgmt_socket.BluetoothSocketError("Connection was closed")
+            msg = "Connection was closed"
+            raise btmgmt_socket.BluetoothSocketError(msg)
         # Write directly to the socket to work around kernel ABI inconsistency
         # where sendto() may return 0 on certain systems (e.g., Odroid M1 with kernel 6.12.43-haos)
         # even though data was successfully sent. Using transport.write() can cause
@@ -219,7 +223,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
 
 
 class MGMTBluetoothCtl:
-    """Class to control interfaces using the BlueZ management API"""
+    """Class to control interfaces using the BlueZ management API."""
 
     def __init__(self, hci_name: str, mac: str, timeout: float) -> None:
         """Initialize the control class."""
@@ -260,7 +264,7 @@ class MGMTBluetoothCtl:
             async with asyncio_timeout(5):
                 # _create_connection_transport accessed directly to avoid SOCK_STREAM check
                 # see https://bugs.python.org/issue38285
-                _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]
+                _, protocol = await loop._create_connection_transport(  # type: ignore[attr-defined]  # noqa: SLF001
                     sock,
                     lambda: BluetoothMGMTProtocol(
                         self.timeout, connection_made_future, sock
@@ -272,13 +276,13 @@ class MGMTBluetoothCtl:
         except asyncio.TimeoutError:
             btmgmt_socket.close(sock)
             raise
-        assert isinstance(protocol, BluetoothMGMTProtocol)  # nosec
+        assert isinstance(protocol, BluetoothMGMTProtocol)  # noqa: S101  # nosec
         self.protocol = protocol
         await self._find_controller()
 
-    async def _find_controller(self) -> None:
+    async def _find_controller(self) -> None:  # noqa: C901
         """Find the controller."""
-        assert self.protocol is not None  # nosec
+        assert self.protocol is not None  # noqa: S101  # nosec
         loop = asyncio.get_running_loop()
         # Try to get the adapter index from the hci device first
         # since it can see downed adapters.
@@ -350,7 +354,7 @@ class MGMTBluetoothCtl:
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
-        assert self.protocol is not None  # nosec
+        assert self.protocol is not None  # noqa: S101  # nosec
         if self.idx is not None:
             response = await self.protocol.send("ReadControllerInformation", self.idx)
             return response.cmd_response_frame.current_settings.get(
@@ -360,19 +364,17 @@ class MGMTBluetoothCtl:
 
     async def set_powered(self, new_state: bool) -> bool:
         """Set the powered state of the interface."""
-        assert self.protocol is not None  # nosec
+        assert self.protocol is not None  # noqa: S101  # nosec
         response = await self.protocol.send(
             "SetPowered", self.idx, int(new_state is True)
         )
-        if response.event_frame.status.value == 0x00:  # 0x00 - Success
-            return True
-        return False
+        return response.event_frame.status.value == 0x00  # 0x00 - Success
 
     async def wait_for_power_state(
         self, new_state: bool, timeout: float
     ) -> bool | None:
         """Wait for the adapter to be powered on or off."""
-        assert self.protocol is not None  # nosec
+        assert self.protocol is not None  # noqa: S101  # nosec
         current_state: bool | None = not new_state
         try:
             async with asyncio_timeout(timeout):
@@ -497,7 +499,7 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     return False
 
 
-async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:
+async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:  # noqa: C901
     """Reset the bluetooth adapter."""
     mac = mac.upper()
     hci_name = f"hci{hci}"
@@ -663,7 +665,7 @@ async def _get_adapter(
         if adapter:
             try:
                 await adapter.close()
-            except Exception as ex:  # pylint: disable=broad-except
+            except Exception as ex:  # noqa: BLE001
                 _LOGGER.warning("Closing Bluetooth adapter %s failed: %s", name, ex)
 
 
@@ -706,7 +708,7 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
     adapter is a USB device) and, if so, whether it succeeded. A non-USB
     adapter (e.g. a built-in UART controller) yields a not-applicable outcome.
     """
-    assert adapter.hci_name is not None  # nosec
+    assert adapter.hci_name is not None  # noqa: S101  # nosec
     hci = hci_name_to_number(adapter.hci_name)
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
@@ -732,10 +734,8 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
             ex,
         )
         return USBResetOutcome.FAILED
-    except Exception as ex:  # pylint: disable=broad-except
-        _LOGGER.exception(
-            "Unexpected error while attempting USB reset of hci%s: %s", hci, ex
-        )
+    except Exception:
+        _LOGGER.exception("Unexpected error while attempting USB reset of hci%s", hci)
         return USBResetOutcome.FAILED
 
 
@@ -758,7 +758,7 @@ async def _bounce_adapter_interface(
 ) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
     loop = asyncio.get_running_loop()
-    assert adapter.idx is not None, "Adapter must have an idx"  # nosec
+    assert adapter.idx is not None, "Adapter must have an idx"  # noqa: S101  # nosec
     sock = await loop.run_in_executor(None, raw_open, adapter.idx)
     try:
         _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
@@ -773,7 +773,7 @@ async def _bounce_adapter_interface(
         await loop.run_in_executor(None, raw_close, sock)
 
 
-async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
+async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:  # noqa: C901
     """Execute the reset."""
     timed_out_getting_powered: bool = False
     power_state_before_reset: bool | None = None
@@ -819,7 +819,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
 
     try:
         await _bounce_adapter_interface(adapter, down=True, up=True)
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:  # noqa: BLE001
         _LOGGER.warning(
             "Could not cycle the Bluetooth adapter %s: %s", adapter.name, ex
         )
@@ -852,7 +852,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
             "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
         )
         return False
-    except Exception as ex:  # pylint: disable=broad-except
+    except Exception as ex:  # noqa: BLE001
         _LOGGER.warning(
             "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
         )
