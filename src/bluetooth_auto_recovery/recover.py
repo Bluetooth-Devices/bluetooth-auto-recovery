@@ -10,6 +10,7 @@ import socket
 import struct
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from enum import Enum, auto
 from functools import cached_property
 
 try:
@@ -52,18 +53,12 @@ HCIDEVUP = 0x400448C9  # 201
 HCIDEVDOWN = 0x400448CA  # 202
 
 
-@dataclass(frozen=True, slots=True)
-class USBResetOutcome:
+class USBResetOutcome(Enum):
     """Outcome of a USB reset attempt."""
 
-    applicable: bool  # False -> adapter is not a USB device
-    succeeded: bool  # only meaningful when applicable is True
-
-
-# Module-level singletons avoid per-call allocation for the common cases.
-_USB_RESET_NOT_APPLICABLE = USBResetOutcome(applicable=False, succeeded=False)
-_USB_RESET_FAILED = USBResetOutcome(applicable=True, succeeded=False)
-_USB_RESET_SUCCEEDED = USBResetOutcome(applicable=True, succeeded=True)
+    SUCCEEDED = auto()  # reset attempted and succeeded
+    FAILED = auto()  # reset attempted but failed
+    NOT_APPLICABLE = auto()  # adapter is not a USB device
 
 
 @dataclass
@@ -524,7 +519,7 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
         # The adapter has gone silent (or the power cycle failed), so escalate to
         # a USB reset. This may also move the adapter to a new hci number.
         usb_reset = await _usb_reset_adapter(adapter)
-        if not usb_reset.applicable:
+        if usb_reset is USBResetOutcome.NOT_APPLICABLE:
             # A USB reset is not applicable because the adapter is not a USB
             # device. A non-USB adapter (e.g. a built-in UART controller) can
             # only be recovered by the power cycle, so fall back to its result
@@ -538,7 +533,7 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
             )
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
-        if not usb_reset.succeeded:
+        if usb_reset is USBResetOutcome.FAILED:
             return False
 
         # Give Dbus some time to catch up in case
@@ -685,15 +680,19 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
     try:
-        return _USB_RESET_SUCCEEDED if await dev.async_reset() else _USB_RESET_FAILED
+        return (
+            USBResetOutcome.SUCCEEDED
+            if await dev.async_reset()
+            else USBResetOutcome.FAILED
+        )
     except NotAUSBDeviceError as ex:
         _LOGGER.debug(
             "hci%s is not a USB device while attempting USB reset: %s", hci, ex
         )
-        return _USB_RESET_NOT_APPLICABLE
+        return USBResetOutcome.NOT_APPLICABLE
     except FileNotFoundError as ex:
         _LOGGER.debug("hci%s not found while attempting USB reset: %s", hci, ex)
-        return _USB_RESET_NOT_APPLICABLE
+        return USBResetOutcome.NOT_APPLICABLE
     except PermissionError as ex:
         _LOGGER.info(
             "hci%s permission denied to %s while attempting USB reset: %s",
@@ -701,12 +700,12 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
             ex.filename,
             ex,
         )
-        return _USB_RESET_FAILED
+        return USBResetOutcome.FAILED
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception(
             "Unexpected error while attempting USB reset of hci%s: %s", hci, ex
         )
-        return _USB_RESET_FAILED
+        return USBResetOutcome.FAILED
 
 
 async def _set_adapter_up_down(

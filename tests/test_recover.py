@@ -457,8 +457,7 @@ async def test_usb_reset_success(adapter: MGMTBluetoothCtl) -> None:
     dev.async_reset = AsyncMock(return_value=True)
     with patch.object(recover, "BluetoothDevice", return_value=dev):
         outcome = await recover._usb_reset_adapter(adapter)
-    assert outcome.applicable is True
-    assert outcome.succeeded is True
+    assert outcome is recover.USBResetOutcome.SUCCEEDED
 
 
 @pytest.mark.asyncio
@@ -476,9 +475,8 @@ async def test_usb_reset_handles_errors(
     dev.async_reset = AsyncMock(side_effect=exc)
     with patch.object(recover, "BluetoothDevice", return_value=dev):
         outcome = await recover._usb_reset_adapter(adapter)
-    # A USB reset was attempted but failed: applicable, not succeeded.
-    assert outcome.applicable is True
-    assert outcome.succeeded is False
+    # A USB reset was attempted but failed.
+    assert outcome is recover.USBResetOutcome.FAILED
 
 
 @pytest.mark.asyncio
@@ -498,7 +496,7 @@ async def test_usb_reset_not_applicable(
     dev.async_reset = AsyncMock(side_effect=exc)
     with patch.object(recover, "BluetoothDevice", return_value=dev):
         outcome = await recover._usb_reset_adapter(adapter)
-    assert outcome.applicable is False
+    assert outcome is recover.USBResetOutcome.NOT_APPLICABLE
 
 
 # ---------------------------------------------------------------------------
@@ -1133,7 +1131,7 @@ async def test_recover_adapter_usb_reset_path() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_SUCCEEDED),
+            AsyncMock(return_value=recover.USBResetOutcome.SUCCEEDED),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
@@ -1150,7 +1148,7 @@ async def test_recover_adapter_usb_reset_fails() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_FAILED),
+            AsyncMock(return_value=recover.USBResetOutcome.FAILED),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
@@ -1162,7 +1160,7 @@ async def test_recover_adapter_gone_silent_forces_usb_reset() -> None:
     first = _resolved_adapter()
     second = _resolved_adapter()
     power_cycle = AsyncMock(return_value=True)
-    usb_reset = AsyncMock(return_value=recover._USB_RESET_SUCCEEDED)
+    usb_reset = AsyncMock(return_value=recover.USBResetOutcome.SUCCEEDED)
     with (
         patch.object(
             recover,
@@ -1195,7 +1193,7 @@ async def test_recover_adapter_gone_silent_non_usb_power_cycle_ok() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_NOT_APPLICABLE),
+            AsyncMock(return_value=recover.USBResetOutcome.NOT_APPLICABLE),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
@@ -1217,7 +1215,7 @@ async def test_recover_adapter_non_usb_power_cycle_failed() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_NOT_APPLICABLE),
+            AsyncMock(return_value=recover.USBResetOutcome.NOT_APPLICABLE),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
@@ -1241,7 +1239,7 @@ async def test_recover_adapter_second_lookup_fails() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_SUCCEEDED),
+            AsyncMock(return_value=recover.USBResetOutcome.SUCCEEDED),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
@@ -1340,7 +1338,7 @@ async def test_recover_adapter_post_reset_rfkill_blocked() -> None:
         patch.object(
             recover,
             "_usb_reset_adapter",
-            AsyncMock(return_value=recover._USB_RESET_SUCCEEDED),
+            AsyncMock(return_value=recover.USBResetOutcome.SUCCEEDED),
         ),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
