@@ -10,6 +10,7 @@ import socket
 import struct
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from enum import Enum, auto
 from functools import cached_property
 
 try:
@@ -56,6 +57,14 @@ MGMT_PROTOCOL_TIMEOUT = 5
 # https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/lib/hci.h
 HCIDEVUP = 0x400448C9  # 201
 HCIDEVDOWN = 0x400448CA  # 202
+
+
+class USBResetOutcome(Enum):
+    """Outcome of a USB reset attempt."""
+
+    SUCCEEDED = auto()  # reset attempted and succeeded
+    FAILED = auto()  # reset attempted but failed
+    NOT_APPLICABLE = auto()  # adapter is not a USB device
 
 
 @dataclass
@@ -527,8 +536,9 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
                 "rfkill has blocked %s, and could not be unblocked", adapter.name
             )
 
-        # If the adapter has gone silent, do the USB reset as well
-        if await _power_cycle_adapter(adapter) and not gone_silent:
+        power_cycle_ok = await _power_cycle_adapter(adapter)
+        # If the adapter has not gone silent, a successful power cycle is enough.
+        if power_cycle_ok and not gone_silent:
             # Give Dbus some time to catch up
             _LOGGER.debug(
                 "Waiting %ss for kernel and Dbus to catch up after successful power cycle",
@@ -537,7 +547,24 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
             await asyncio.sleep(DBUS_REGISTER_TIME)
             return True
 
-        if not await _usb_reset_adapter(adapter):
+        # The adapter has gone silent (or the power cycle failed), so escalate to
+        # a USB reset. This may also move the adapter to a new hci number.
+        usb_reset = await _usb_reset_adapter(adapter)
+        if usb_reset is USBResetOutcome.NOT_APPLICABLE:
+            # A USB reset is not applicable because the adapter is not a USB
+            # device. A non-USB adapter (e.g. a built-in UART controller) can
+            # only be recovered by the power cycle, so fall back to its result
+            # rather than reporting a spurious failure.
+            if not power_cycle_ok:
+                return False
+            _LOGGER.debug(
+                "Adapter %s is not a USB device; relying on the successful "
+                "power cycle for recovery",
+                adapter.name,
+            )
+            await asyncio.sleep(DBUS_REGISTER_TIME)
+            return True
+        if usb_reset is USBResetOutcome.FAILED:
             return False
 
         # Give Dbus some time to catch up in case
@@ -672,22 +699,31 @@ def hci_name_to_number(hci_name: str) -> int:
     return int(hci_name.removeprefix("hci"))
 
 
-async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool:
-    """Reset the bluetooth adapter."""
+async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
+    """Reset the bluetooth adapter via USB.
+
+    Returns an outcome describing whether a USB reset was applicable (the
+    adapter is a USB device) and, if so, whether it succeeded. A non-USB
+    adapter (e.g. a built-in UART controller) yields a not-applicable outcome.
+    """
     assert adapter.hci_name is not None  # nosec
     hci = hci_name_to_number(adapter.hci_name)
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
     try:
-        return await dev.async_reset()
+        return (
+            USBResetOutcome.SUCCEEDED
+            if await dev.async_reset()
+            else USBResetOutcome.FAILED
+        )
     except NotAUSBDeviceError as ex:
         _LOGGER.debug(
-            "hci%s is not a USB devices while attempting USB reset: %s", hci, ex
+            "hci%s is not a USB device while attempting USB reset: %s", hci, ex
         )
-        return False
+        return USBResetOutcome.NOT_APPLICABLE
     except FileNotFoundError as ex:
         _LOGGER.debug("hci%s not found while attempting USB reset: %s", hci, ex)
-        return False
+        return USBResetOutcome.NOT_APPLICABLE
     except PermissionError as ex:
         _LOGGER.info(
             "hci%s permission denied to %s while attempting USB reset: %s",
@@ -695,12 +731,12 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> bool:
             ex.filename,
             ex,
         )
-        return False
+        return USBResetOutcome.FAILED
     except Exception as ex:  # pylint: disable=broad-except
         _LOGGER.exception(
             "Unexpected error while attempting USB reset of hci%s: %s", hci, ex
         )
-        return False
+        return USBResetOutcome.FAILED
 
 
 async def _set_adapter_up_down(
