@@ -8,7 +8,7 @@ import errno
 import logging
 import socket
 import struct
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -459,7 +459,7 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     # RFKILL_UNBLOCK_POLL_INTERVAL seconds with `await asyncio.sleep(...)`, and
     # `_check_rfkill` runs in an executor under its own timeout, so the event
     # loop is yielded for the entire duration of the poll.
-    try:
+    with suppress(asyncio.TimeoutError):
         async with asyncio_timeout(RFKILL_UNBLOCK_GRACE_TIME):
             while True:
                 rfkill_info = await _check_rfkill(adapter)
@@ -480,8 +480,6 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
                     adapter.name,
                 )
                 await asyncio.sleep(RFKILL_UNBLOCK_POLL_INTERVAL)
-    except asyncio.TimeoutError:
-        pass
 
     _LOGGER.warning(
         "Bluetooth adapter %s is blocked by rfkill and could not be unblocked",
