@@ -395,14 +395,38 @@ async def test_check_or_unblock_soft_block_still_blocked(
     adapter: MGMTBluetoothCtl,
 ) -> None:
     blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
+    # Block never clears -> the poll runs until the wall-clock grace expires and
+    # then reports failure. Shrink the grace so the real timeout fires fast.
     with (
-        patch.object(
-            recover, "_check_rfkill", AsyncMock(side_effect=[blocked, blocked])
-        ),
+        patch.object(recover, "_check_rfkill", AsyncMock(return_value=blocked)),
+        patch.object(recover, "_unblock_rfkill", AsyncMock(return_value=True)),
+        patch.object(recover, "RFKILL_UNBLOCK_GRACE_TIME", 0.05),
+    ):
+        assert await recover._check_or_unblock_rfkill(adapter) is False
+
+
+@pytest.mark.asyncio
+async def test_check_or_unblock_soft_block_clears_on_later_attempt(
+    adapter: MGMTBluetoothCtl,
+) -> None:
+    """A block that clears on the second poll re-check still succeeds.
+
+    The side-effect sequence is initial check (blocked) -> first poll re-check
+    (still blocked) -> second poll re-check (cleared), so the block clears on
+    the second re-check. The old single fixed-wait implementation would have
+    reported failure here; polling tolerates the late unblock.
+    """
+    blocked = RFKillInfo(soft_block=True, hard_block=False, idx=1)
+    cleared = RFKillInfo(soft_block=False, hard_block=False, idx=1)
+    check = AsyncMock(side_effect=[blocked, blocked, cleared])
+    with (
+        patch.object(recover, "_check_rfkill", check),
         patch.object(recover, "_unblock_rfkill", AsyncMock(return_value=True)),
         patch.object(recover.asyncio, "sleep", AsyncMock()),
     ):
-        assert await recover._check_or_unblock_rfkill(adapter) is False
+        assert await recover._check_or_unblock_rfkill(adapter) is True
+    # initial check + 2 poll re-checks (clears on the second)
+    assert check.await_count == 3
 
 
 # ---------------------------------------------------------------------------
