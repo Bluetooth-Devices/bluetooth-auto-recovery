@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import errno
 import logging
+import time
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -104,7 +105,7 @@ def test_rfkill_unblock_success(adapter: MGMTBluetoothCtl) -> None:
     with (
         patch.object(recover, "rfkill", rfkill_mod),
         patch.object(recover, "rfkh", rfkh_mod),
-        patch("builtins.open", MagicMock()),
+        patch("pathlib.Path.open", MagicMock()),
     ):
         assert rfkill_unblock(adapter, 7) is True
 
@@ -114,7 +115,7 @@ def test_rfkill_unblock_failure(adapter: MGMTBluetoothCtl) -> None:
     rfkill_mod.dpath = "/dev/rfkill"
     with (
         patch.object(recover, "rfkill", rfkill_mod),
-        patch("builtins.open", side_effect=OSError("nope")),
+        patch("pathlib.Path.open", side_effect=OSError("nope")),
     ):
         assert rfkill_unblock(adapter, 7) is False
 
@@ -157,7 +158,7 @@ async def test_close_no_protocol() -> None:
 async def test_get_powered(adapter: MGMTBluetoothCtl) -> None:
     response = MagicMock()
     response.cmd_response_frame.current_settings.get.return_value = True
-    cast(AsyncMock, adapter.protocol).send.return_value = response
+    cast("AsyncMock", adapter.protocol).send.return_value = response
     assert await adapter.get_powered() is True
 
 
@@ -169,7 +170,7 @@ async def test_get_powered_no_idx(adapter: MGMTBluetoothCtl) -> None:
 
 @pytest.mark.asyncio
 async def test_set_powered_success(adapter: MGMTBluetoothCtl) -> None:
-    cast(AsyncMock, adapter.protocol).send.return_value = make_send_response(
+    cast("AsyncMock", adapter.protocol).send.return_value = make_send_response(
         status=0x00
     )
     assert await adapter.set_powered(True) is True
@@ -177,7 +178,7 @@ async def test_set_powered_success(adapter: MGMTBluetoothCtl) -> None:
 
 @pytest.mark.asyncio
 async def test_set_powered_failure(adapter: MGMTBluetoothCtl) -> None:
-    cast(AsyncMock, adapter.protocol).send.return_value = make_send_response(
+    cast("AsyncMock", adapter.protocol).send.return_value = make_send_response(
         status=0x01
     )
     assert await adapter.set_powered(True) is False
@@ -218,7 +219,7 @@ async def test_find_controller_match_by_mac_from_hci() -> None:
     assert ctl.idx == 0
     assert ctl.hci_name == "hci0"
     assert ctl.mac == "AA:BB:CC:DD:EE:FF"
-    cast(AsyncMock, ctl.protocol).send.assert_not_called()
+    cast("AsyncMock", ctl.protocol).send.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -246,7 +247,7 @@ async def test_find_controller_match_by_mac_via_controller_info() -> None:
     info_response = MagicMock()
     info_response.cmd_response_frame.address = "aa:bb:cc:dd:ee:ff"
 
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(
         side_effect=[idx_response, info_response]
     )
     with patch.object(recover, "get_adapters_from_hci", return_value={}):
@@ -268,7 +269,7 @@ async def test_find_controller_fallback_by_hci_number() -> None:
     # MAC differs from expected, so it falls back to matching by hci number 0.
     info_response.cmd_response_frame.address = "99:99:99:99:99:99"
 
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(
         side_effect=[idx_response, info_response]
     )
     with patch.object(recover, "get_adapters_from_hci", return_value={}):
@@ -283,7 +284,7 @@ async def test_find_controller_index_list_error_status() -> None:
     ctl = _ctl()
     idx_response = MagicMock()
     idx_response.event_frame.status.value = 0x01  # non-success
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(return_value=idx_response)
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(return_value=idx_response)
     with patch.object(recover, "get_adapters_from_hci", return_value={}):
         await ctl._find_controller()
     assert ctl.idx is None
@@ -295,7 +296,7 @@ async def test_find_controller_no_controllers() -> None:
     idx_response = MagicMock()
     idx_response.event_frame.status.value = 0x00
     idx_response.cmd_response_frame.num_controllers = 0
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(return_value=idx_response)
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(return_value=idx_response)
     with patch.object(recover, "get_adapters_from_hci", return_value={}):
         await ctl._find_controller()
     assert ctl.idx is None
@@ -314,11 +315,11 @@ async def test_find_controller_hci_adapters_present_but_no_match() -> None:
     idx_response = MagicMock()
     idx_response.event_frame.status.value = 0x00
     idx_response.cmd_response_frame.num_controllers = 0
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(return_value=idx_response)
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(return_value=idx_response)
     with patch.object(recover, "get_adapters_from_hci", return_value=adapters):
         await ctl._find_controller()
     assert ctl.idx is None
-    cast(AsyncMock, ctl.protocol).send.assert_awaited_once_with(
+    cast("AsyncMock", ctl.protocol).send.assert_awaited_once_with(
         "ReadControllerIndexList", None
     )
 
@@ -336,7 +337,7 @@ async def test_find_controller_no_fallback_when_hci_number_absent() -> None:
     # expected hci name resolves to index 0 — so the hci-number fallback misses.
     info_response.cmd_response_frame.address = "99:99:99:99:99:99"
 
-    cast(AsyncMock, ctl.protocol).send = AsyncMock(
+    cast("AsyncMock", ctl.protocol).send = AsyncMock(
         side_effect=[idx_response, info_response]
     )
     with patch.object(recover, "get_adapters_from_hci", return_value={}):
@@ -358,18 +359,18 @@ async def test_check_rfkill_success(adapter: MGMTBluetoothCtl) -> None:
 
 @pytest.mark.asyncio
 async def test_check_rfkill_timeout(adapter: MGMTBluetoothCtl) -> None:
-    with patch.object(
-        recover, "rfkill_list_bluetooth", side_effect=lambda a: _block_forever()
+    # asyncio_timeout wraps the executor call; force it to expire fast.
+    with (
+        patch.object(
+            recover, "rfkill_list_bluetooth", side_effect=lambda a: _block_forever()
+        ),
+        patch.object(recover, "MAX_RFKILL_TIME", 0.01),
     ):
-        # asyncio_timeout wraps the executor call; force it to expire fast.
-        with patch.object(recover, "MAX_RFKILL_TIME", 0.01):
-            result = await recover._check_rfkill(adapter)
+        result = await recover._check_rfkill(adapter)
     assert result == RFKillInfo(None, None, None)
 
 
 def _block_forever() -> RFKillInfo:
-    import time
-
     time.sleep(0.2)
     return RFKillInfo(None, None, None)
 
@@ -382,12 +383,14 @@ async def test_unblock_rfkill_success(adapter: MGMTBluetoothCtl) -> None:
 
 @pytest.mark.asyncio
 async def test_unblock_rfkill_timeout(adapter: MGMTBluetoothCtl) -> None:
-    with patch.object(
-        recover, "rfkill_unblock", side_effect=lambda a, idx: _block_forever()
+    # asyncio_timeout wraps the executor call; force it to expire fast.
+    with (
+        patch.object(
+            recover, "rfkill_unblock", side_effect=lambda a, idx: _block_forever()
+        ),
+        patch.object(recover, "MAX_RFKILL_TIME", 0.01),
     ):
-        # asyncio_timeout wraps the executor call; force it to expire fast.
-        with patch.object(recover, "MAX_RFKILL_TIME", 0.01):
-            assert await recover._unblock_rfkill(adapter, 3) is False
+        assert await recover._unblock_rfkill(adapter, 3) is False
 
 
 # ---------------------------------------------------------------------------
@@ -705,7 +708,7 @@ async def test_bounce_adapter_interface_down_then_up(adapter: MGMTBluetoothCtl) 
     sock = MagicMock()
     calls: list[str] = []
 
-    async def fake_set(_adapter, _sock, _loop, code, state):  # noqa: ANN001
+    async def fake_set(_adapter, _sock, _loop, code, state):
         calls.append(state)
 
     with (
@@ -725,7 +728,7 @@ async def test_bounce_adapter_interface_up_only(adapter: MGMTBluetoothCtl) -> No
     sock = MagicMock()
     calls: list[str] = []
 
-    async def fake_set(_adapter, _sock, _loop, code, state):  # noqa: ANN001
+    async def fake_set(_adapter, _sock, _loop, code, state):
         calls.append(state)
 
     with (
@@ -744,7 +747,7 @@ async def test_bounce_adapter_interface_down_only(adapter: MGMTBluetoothCtl) -> 
     sock = MagicMock()
     calls: list[str] = []
 
-    async def fake_set(_adapter, _sock, _loop, code, state):  # noqa: ANN001
+    async def fake_set(_adapter, _sock, _loop, code, state):
         calls.append(state)
 
     with (
@@ -805,7 +808,7 @@ async def test_execute_reset_skips_power_off_on_timeout(
 
 @pytest.mark.asyncio
 async def test_execute_reset_final_bounce_already_up(adapter: MGMTBluetoothCtl) -> None:
-    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+    async def bounce(_adapter, *, down, up):
         if down is False and up is True:
             raise OSError(errno.EALREADY, "already up")
 
@@ -820,7 +823,7 @@ async def test_execute_reset_final_bounce_already_up(adapter: MGMTBluetoothCtl) 
 
 @pytest.mark.asyncio
 async def test_execute_reset_final_bounce_oserror(adapter: MGMTBluetoothCtl) -> None:
-    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+    async def bounce(_adapter, *, down, up):
         if down is False and up is True:
             raise OSError(errno.EIO, "io error")
 
@@ -838,9 +841,10 @@ async def test_execute_reset_final_bounce_unexpected_error(
     adapter: MGMTBluetoothCtl,
 ) -> None:
     # A non-OSError raised by the final bounce is swallowed and fails the reset.
-    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+    async def bounce(_adapter, *, down, up):
         if down is False and up is True:
-            raise RuntimeError("boom")
+            msg = "boom"
+            raise RuntimeError(msg)
 
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
@@ -889,7 +893,7 @@ async def test_execute_reset_first_bounce_error_is_swallowed(
     adapter: MGMTBluetoothCtl,
 ) -> None:
     # The down/up bounce before power-on is best-effort: a failure does not abort.
-    async def bounce(_adapter, *, down, up):  # noqa: ANN001
+    async def bounce(_adapter, *, down, up):
         if down is True:
             raise OSError(errno.EIO, "io error")
 
@@ -1077,9 +1081,11 @@ async def test_protocol_data_received_ignores_value_error() -> None:
 async def test_protocol_send_without_transport_raises() -> None:
     proto = _make_protocol()
     proto.transport = None
-    with patch.object(recover.btmgmt_protocol, "command", return_value=[]):
-        with pytest.raises(recover.btmgmt_socket.BluetoothSocketError):
-            await proto.send("ReadControllerIndexList", None)
+    with (
+        patch.object(recover.btmgmt_protocol, "command", return_value=[]),
+        pytest.raises(recover.btmgmt_socket.BluetoothSocketError),
+    ):
+        await proto.send("ReadControllerIndexList", None)
 
 
 @pytest.mark.asyncio
@@ -1095,8 +1101,8 @@ async def test_protocol_send_writes_to_socket_directly() -> None:
         proto.future.set_result("RESPONSE")
         result = await task
     # The kernel-ABI workaround writes to the raw socket, not the transport.
-    cast(MagicMock, proto.sock).send.assert_called_once_with(b"data")
-    cast(MagicMock, proto.transport).write.assert_not_called()
+    cast("MagicMock", proto.sock).send.assert_called_once_with(b"data")
+    cast("MagicMock", proto.transport).write.assert_not_called()
     assert result == "RESPONSE"
 
 
@@ -1107,9 +1113,11 @@ async def test_protocol_send_times_out() -> None:
     proto.transport = MagicMock()
     frame = MagicMock()
     frame.octets = b"data"
-    with patch.object(recover.btmgmt_protocol, "command", return_value=[frame]):
-        with pytest.raises(asyncio.TimeoutError):
-            await proto.send("ReadControllerInformation", 0)
+    with (
+        patch.object(recover.btmgmt_protocol, "command", return_value=[frame]),
+        pytest.raises(asyncio.TimeoutError),
+    ):
+        await proto.send("ReadControllerInformation", 0)
 
 
 @pytest.mark.asyncio
@@ -1182,7 +1190,7 @@ async def test_setup_success() -> None:
     sock = MagicMock()
     loop = asyncio.get_running_loop()
 
-    async def fake_create(sock_arg, factory, *args, **kwargs):  # noqa: ANN001
+    async def fake_create(sock_arg, factory, *args, **kwargs):
         proto = factory()
         proto.connection_made(MagicMock())
         return (MagicMock(), proto)
@@ -1203,7 +1211,7 @@ async def test_setup_timeout_closes_socket() -> None:
     sock = MagicMock()
     loop = asyncio.get_running_loop()
 
-    async def hang(*args, **kwargs):  # noqa: ANN001
+    async def hang(*args, **kwargs):
         await asyncio.sleep(10)
 
     real_timeout = recover.asyncio_timeout
@@ -1213,9 +1221,9 @@ async def test_setup_timeout_closes_socket() -> None:
         patch.object(loop, "_create_connection_transport", hang),
         patch.object(recover, "asyncio_timeout", lambda _t: real_timeout(0.01)),
         patch.object(recover.btmgmt_socket, "close") as mock_close,
+        pytest.raises(asyncio.TimeoutError),
     ):
-        with pytest.raises(asyncio.TimeoutError):
-            await ctl.setup()
+        await ctl.setup()
     mock_close.assert_called_once_with(sock)
 
 

@@ -5,7 +5,10 @@ __version__ = "1.6.4"
 import asyncio
 import importlib
 import sys
-from types import ModuleType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 _MODULE_CACHE: dict[str, ModuleType] = {}
 
@@ -26,7 +29,7 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
         )
         _MODULE_CACHE[recover_module_name] = recover_module
         this_module = sys.modules[__package__]
-        this_module.recover_adapter = recover_module.recover_adapter  # type: ignore
+        this_module.recover_adapter = recover_module.recover_adapter  # type: ignore[attr-defined]
 
     return await recover_module.recover_adapter(hci, mac, gone_silent)
 

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from bluetooth_auto_recovery.recover import MGMTBluetoothCtl
 
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
 
 @pytest.fixture
 def adapter() -> MGMTBluetoothCtl:
-    """A fully-resolved adapter with an AsyncMock protocol."""
+    """Return a fully-resolved adapter with an AsyncMock protocol."""
     ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
     ctl.idx = 0
     ctl.hci_name = "hci0"

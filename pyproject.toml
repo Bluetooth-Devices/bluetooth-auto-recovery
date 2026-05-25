@@ -74,23 +74,32 @@ exclude_lines = [
 ]
 
 [tool.ruff]
+required-version = ">=0.5.0"
 target-version = "py310"
 line-length = 88
 
 [tool.ruff.lint]
 select = [
-    "E",  # pycodestyle errors
-    "W",  # pycodestyle warnings
-    "F",  # pyflakes
-    "I",  # isort
-    "UP", # pyupgrade
+    "A", "ANN", "ARG", "ASYNC", "B", "BLE", "C4", "C90", "D", "DTZ",
+    "E", "EM", "ERA", "EXE", "F", "FA", "FIX", "FLY", "FURB", "G", "I",
+    "ICN", "INP", "ISC", "LOG", "N", "NPY", "PERF", "PGH", "PIE", "PL",
+    "PT", "PTH", "PYI", "Q", "UP", "RET", "RSE", "RUF", "S", "SIM",
+    "SLF", "SLOT", "T10", "T20", "TC", "TD", "TID", "TRY", "W", "YTT"
 ]
-# E501 (line-too-long) is left to the formatter; unsplittable strings
-# (e.g. log messages) are intentionally allowed to exceed the line length.
-ignore = ["E501"]
+ignore = [
+    "ANN401", "ASYNC109", "D100", "D101", "D102", "D103", "D104", "D105",
+    "D106", "D107", "D203", "D213", "E501", "E721", "PLR0911", "PLR0912",
+    "PLR0913", "PLR0915", "PLR2004", "PLW2901", "TRY003", "TID252"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "ARG", "S101", "S106", "SLF"]
 
 [tool.ruff.lint.isort]
+force-sort-within-sections = true
 known-first-party = ["bluetooth_auto_recovery", "tests"]
+combine-as-imports = true
+split-on-trailing-comma = false
 
 [tool.mypy]
 check_untyped_defs = true
