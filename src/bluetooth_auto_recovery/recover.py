@@ -38,6 +38,13 @@ POWER_ON_TIME = 3
 MAX_RFKILL_TIME = 3
 DBUS_REGISTER_TIME = 3.5
 
+# A USB reset disconnects the adapter and forces a re-enumeration, after which
+# it must also re-register with BlueZ. On slower systems (e.g. Raspberry Pi /
+# Home Assistant) this can take longer than a single DBUS_REGISTER_TIME wait,
+# so we poll for the adapter to reappear instead of giving up after one lookup.
+POST_RESET_LOOKUP_ATTEMPTS = 3
+POST_RESET_LOOKUP_RETRY_TIME = 2
+
 MGMT_PROTOCOL_TIMEOUT = 5
 
 # https://git.kernel.org/pub/scm/bluetooth/bluez.git/tree/lib/hci.h
@@ -510,30 +517,49 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
         )
         await asyncio.sleep(DBUS_REGISTER_TIME)
 
-    # We just did a USB reset which may cause the adapter
-    # to move to a different hci number. Try to find it again.
-    async with _get_adapter(hci_name, mac) as adapter:
-        if not adapter or adapter.idx is None or adapter.hci_name is None:
-            _LOGGER.warning(
-                "Could not find adapter with mac address %s or %s", mac, hci_name
-            )
-            return False
+    # We just did a USB reset which causes the adapter to disconnect and
+    # re-enumerate (and possibly move to a different hci number). On slower
+    # systems the re-enumeration plus BlueZ re-registration can take longer
+    # than the single DBUS_REGISTER_TIME wait above, so poll for the adapter
+    # to reappear instead of reporting failure after a single lookup.
+    for attempt in range(1, POST_RESET_LOOKUP_ATTEMPTS + 1):
+        async with _get_adapter(hci_name, mac) as adapter:
+            if adapter and adapter.idx is not None and adapter.hci_name is not None:
+                if adapter.hci_name != hci_name:
+                    hci_name = adapter.hci_name
+                    _LOGGER.warning(
+                        "Adapter with mac address %s has moved to %s", mac, hci_name
+                    )
 
-        if adapter.hci_name != hci_name:
-            hci_name = adapter.hci_name
-            _LOGGER.warning(
-                "Adapter with mac address %s has moved to %s", mac, hci_name
-            )
+                # After the reset, rfkill may be blocked so we need
+                # to check and unblock it.
+                if not await _check_or_unblock_rfkill(adapter):
+                    _LOGGER.warning(
+                        "rfkill has blocked %s, and could not be unblocked",
+                        adapter.name,
+                    )
+                    return False
 
-        # After the reset, rfkill may be blocked so we need
-        # to check and unblock it.
-        if not await _check_or_unblock_rfkill(adapter):
-            _LOGGER.warning(
-                "rfkill has blocked %s, and could not be unblocked", adapter.name
-            )
-            return False
+                return True
 
-    return True
+        if attempt < POST_RESET_LOOKUP_ATTEMPTS:
+            _LOGGER.debug(
+                "Adapter with mac address %s (%s) has not reappeared after the "
+                "USB reset yet (attempt %s/%s); waiting %ss before retrying",
+                mac,
+                hci_name,
+                attempt,
+                POST_RESET_LOOKUP_ATTEMPTS,
+                POST_RESET_LOOKUP_RETRY_TIME,
+            )
+            await asyncio.sleep(POST_RESET_LOOKUP_RETRY_TIME)
+
+    _LOGGER.warning(
+        "Could not find adapter with mac address %s or %s after USB reset",
+        mac,
+        hci_name,
+    )
+    return False
 
 
 @asynccontextmanager
