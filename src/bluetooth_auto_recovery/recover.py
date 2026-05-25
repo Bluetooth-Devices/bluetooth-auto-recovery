@@ -17,7 +17,7 @@ try:
     from fcntl import ioctl
 
     import pyric.utils.rfkill as rfkill
-except ImportError:
+except ImportError:  # pragma: no cover - platform without pyric/fcntl
     ioctl = None  # type: ignore
     rfkill = None
 

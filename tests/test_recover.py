@@ -301,6 +301,49 @@ async def test_find_controller_no_controllers() -> None:
     assert ctl.idx is None
 
 
+@pytest.mark.asyncio
+async def test_find_controller_hci_adapters_present_but_no_match() -> None:
+    ctl = _ctl()
+    # Two adapters from hci, none matching the expected mac or hci name, so
+    # both hci-based loops must run to completion and fall through to the
+    # controller index list query.
+    adapters = {
+        "hci1": {"dev_id": 1, "name": "hci1", "bdaddr": "11:11:11:11:11:11"},
+        "hci2": {"dev_id": 2, "name": "hci2", "bdaddr": "22:22:22:22:22:22"},
+    }
+    idx_response = MagicMock()
+    idx_response.event_frame.status.value = 0x00
+    idx_response.cmd_response_frame.num_controllers = 0
+    cast(AsyncMock, ctl.protocol).send = AsyncMock(return_value=idx_response)
+    with patch.object(recover, "get_adapters_from_hci", return_value=adapters):
+        await ctl._find_controller()
+    assert ctl.idx is None
+    cast(AsyncMock, ctl.protocol).send.assert_awaited_once_with(
+        "ReadControllerIndexList", None
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_controller_no_fallback_when_hci_number_absent() -> None:
+    ctl = _ctl()
+    idx_response = MagicMock()
+    idx_response.event_frame.status.value = 0x00
+    idx_response.cmd_response_frame.num_controllers = 1
+    setattr(idx_response.cmd_response_frame, "controller_index[i]", [5])
+
+    info_response = MagicMock()
+    # MAC differs and the only presented controller is index 5, while the
+    # expected hci name resolves to index 0 — so the hci-number fallback misses.
+    info_response.cmd_response_frame.address = "99:99:99:99:99:99"
+
+    cast(AsyncMock, ctl.protocol).send = AsyncMock(
+        side_effect=[idx_response, info_response]
+    )
+    with patch.object(recover, "get_adapters_from_hci", return_value={}):
+        await ctl._find_controller()
+    assert ctl.idx is None
+
+
 # ---------------------------------------------------------------------------
 # _check_rfkill / _unblock_rfkill
 # ---------------------------------------------------------------------------
@@ -696,6 +739,25 @@ async def test_bounce_adapter_interface_up_only(adapter: MGMTBluetoothCtl) -> No
     assert calls == ["up"]
 
 
+@pytest.mark.asyncio
+async def test_bounce_adapter_interface_down_only(adapter: MGMTBluetoothCtl) -> None:
+    sock = MagicMock()
+    calls: list[str] = []
+
+    async def fake_set(_adapter, _sock, _loop, code, state):  # noqa: ANN001
+        calls.append(state)
+
+    with (
+        patch.object(recover, "raw_open", return_value=sock),
+        patch.object(recover, "raw_close"),
+        patch.object(recover, "_set_adapter_up_down", side_effect=fake_set),
+        patch.object(recover.asyncio, "sleep", AsyncMock()),
+    ):
+        await recover._bounce_adapter_interface(adapter, up=False, down=True)
+
+    assert calls == ["down"]
+
+
 # ---------------------------------------------------------------------------
 # _execute_reset
 # ---------------------------------------------------------------------------
@@ -958,6 +1020,15 @@ async def test_get_adapter_close_failure_is_swallowed() -> None:
     ctl.close.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_get_adapter_skips_close_when_construction_fails() -> None:
+    # If the adapter is never constructed, the finally block must not try to
+    # close a None adapter.
+    with patch.object(recover, "MGMTBluetoothCtl", side_effect=OSError("no socket")):
+        async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
+            assert got is None
+
+
 # ---------------------------------------------------------------------------
 # BluetoothMGMTProtocol
 # ---------------------------------------------------------------------------
@@ -1056,6 +1127,47 @@ async def test_protocol_connection_lost_clears_transport() -> None:
     proto = _make_protocol()
     proto.transport = MagicMock()
     proto.connection_lost(OSError("dropped"))
+    assert proto.transport is None
+
+
+@pytest.mark.asyncio
+async def test_protocol_connection_made_with_resolved_future() -> None:
+    proto = _make_protocol()
+    # Future already resolved (e.g. a second connection_made) must not be
+    # resolved again, but the transport is still recorded.
+    proto.connection_mode_future.set_result(None)
+    transport = MagicMock()
+    proto.connection_made(transport)
+    assert proto.transport is transport
+
+
+@pytest.mark.asyncio
+async def test_protocol_data_received_without_pending_future() -> None:
+    proto = _make_protocol()
+    proto.future = None
+    # With no pending future, incoming data is parsed and discarded silently.
+    proto.data_received(b"payload")
+    assert proto.future is None
+
+
+@pytest.mark.asyncio
+async def test_protocol_timeout_future_noop_when_already_done() -> None:
+    proto = _make_protocol()
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    sentinel = MagicMock()
+    fut.set_result(sentinel)
+    # An already-resolved future must not have a timeout exception set on it.
+    proto._timeout_future(fut)
+    assert fut.result() is sentinel
+
+
+@pytest.mark.asyncio
+async def test_protocol_connection_lost_without_exc() -> None:
+    proto = _make_protocol()
+    proto.transport = MagicMock()
+    # A clean close (exc is None) clears the transport without warning.
+    proto.connection_lost(None)
     assert proto.transport is None
 
 
