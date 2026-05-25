@@ -499,7 +499,7 @@ async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     return False
 
 
-async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:  # noqa: C901
+async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool:
     """Reset the bluetooth adapter."""
     mac = mac.upper()
     hci_name = f"hci{hci}"
@@ -578,10 +578,23 @@ async def recover_adapter(hci: int, mac: str, gone_silent: bool = False) -> bool
         await asyncio.sleep(DBUS_REGISTER_TIME)
 
     # We just did a USB reset which causes the adapter to disconnect and
-    # re-enumerate (and possibly move to a different hci number). On slower
-    # systems the re-enumeration plus BlueZ re-registration can take longer
-    # than the single DBUS_REGISTER_TIME wait above, so poll for the adapter
-    # to reappear instead of reporting failure after a single lookup.
+    # re-enumerate (and possibly move to a different hci number), so wait for
+    # it to reappear.
+    return await _await_adapter_after_usb_reset(hci_name, mac)
+
+
+async def _await_adapter_after_usb_reset(hci_name: str, mac: str) -> bool:
+    """Wait for an adapter to reappear after a USB reset.
+
+    A USB reset disconnects the adapter and triggers a re-enumeration that may
+    also move it to a new hci number. On slower systems (Pi/Home Assistant) the
+    re-enumeration plus BlueZ re-registration can take longer than a single
+    DBUS_REGISTER_TIME wait, so poll for the adapter to reappear instead of
+    reporting failure after a single lookup.
+
+    Returns True once the adapter is back (and rfkill, if newly blocked, was
+    cleared), or False if it never reappears or stays rfkill-blocked.
+    """
     for attempt in range(1, POST_RESET_LOOKUP_ATTEMPTS + 1):
         async with _get_adapter(hci_name, mac) as adapter:
             if adapter and adapter.idx is not None and adapter.hci_name is not None:
