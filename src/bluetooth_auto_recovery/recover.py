@@ -786,12 +786,26 @@ async def _bounce_adapter_interface(
         await loop.run_in_executor(None, raw_close, sock)
 
 
-async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:  # noqa: C901
-    """Execute the reset."""
-    timed_out_getting_powered: bool = False
-    power_state_before_reset: bool | None = None
+@dataclass(frozen=True, slots=True)
+class PreResetPowerState:
+    """Power state read before a reset.
+
+    ``timed_out`` is True only when the read timed out, which signals the
+    caller to skip the power-off step: a timeout likely means the interface is
+    frozen and will not respond to power commands, so the reset should proceed
+    straight to bouncing the interface.
+    """
+
+    power_state: bool | None
+    timed_out: bool
+
+
+async def _read_power_state_for_reset(
+    adapter: MGMTBluetoothCtl,
+) -> PreResetPowerState:
+    """Read the adapter power state before a reset."""
     try:
-        power_state_before_reset = await adapter.get_powered()
+        return PreResetPowerState(await adapter.get_powered(), timed_out=False)
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not determine the power state of the Bluetooth adapter %s: %s",
@@ -804,18 +818,50 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:  # noqa: C901
             adapter.name,
             adapter.timeout,
         )
-        timed_out_getting_powered = True
+        return PreResetPowerState(None, timed_out=True)
     except Exception:  # pylint: disable=broad-except
         # _LOGGER.exception already records the traceback, so no extra %s is needed.
         _LOGGER.exception(
             "Could not determine the power state of the Bluetooth adapter %s",
             adapter.name,
         )
+    return PreResetPowerState(None, timed_out=False)
+
+
+async def _bring_adapter_up(adapter: MGMTBluetoothCtl) -> bool:
+    """Bring the adapter interface up after a successful power-on.
+
+    Returns True if the interface ends up up (including when it is already up),
+    False if it could not be brought up.
+    """
+    try:
+        await _bounce_adapter_interface(adapter, down=False, up=True)
+    except OSError as ex:
+        if ex.errno == errno.EALREADY:
+            _LOGGER.debug("Adapter %s is already up", adapter.name)
+            return True
+        _LOGGER.warning(
+            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
+        )
+        return False
+    except Exception as ex:  # noqa: BLE001
+        _LOGGER.warning(
+            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
+        )
+        return False
+
+    return True
+
+
+async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
+    """Execute the reset."""
+    pre_reset = await _read_power_state_for_reset(adapter)
+    power_state_before_reset = pre_reset.power_state
 
     # Do not attempt to power off if it timed out getting the power state
     # as it likely means the adapter interface is frozen and will not respond to
     # power off commands so we need to proceed to bounce the interface
-    if not timed_out_getting_powered:
+    if not pre_reset.timed_out:
         try:
             await _execute_power_off(adapter, power_state_before_reset)
         except asyncio.TimeoutError:
@@ -855,23 +901,7 @@ async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:  # noqa: C901
     if not power_on_ok:
         return False
 
-    try:
-        await _bounce_adapter_interface(adapter, down=False, up=True)
-    except OSError as ex:
-        if ex.errno == errno.EALREADY:
-            _LOGGER.debug("Adapter %s is already up", adapter.name)
-            return True
-        _LOGGER.warning(
-            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
-        )
-        return False
-    except Exception as ex:  # noqa: BLE001
-        _LOGGER.warning(
-            "Could not bring up the Bluetooth adapter %s: %s", adapter.name, ex
-        )
-        return False
-
-    return True
+    return await _bring_adapter_up(adapter)
 
 
 async def _execute_power_on(
