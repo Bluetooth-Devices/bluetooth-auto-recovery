@@ -786,19 +786,26 @@ async def _bounce_adapter_interface(
         await loop.run_in_executor(None, raw_close, sock)
 
 
+@dataclass(frozen=True, slots=True)
+class PreResetPowerState:
+    """Power state read before a reset.
+
+    ``timed_out`` is True only when the read timed out, which signals the
+    caller to skip the power-off step: a timeout likely means the interface is
+    frozen and will not respond to power commands, so the reset should proceed
+    straight to bouncing the interface.
+    """
+
+    power_state: bool | None
+    timed_out: bool
+
+
 async def _read_power_state_for_reset(
     adapter: MGMTBluetoothCtl,
-) -> tuple[bool | None, bool]:
-    """Read the adapter power state before a reset.
-
-    Returns a ``(power_state, timed_out)`` tuple. ``timed_out`` is True only
-    when the read timed out, which signals the caller to skip the power-off
-    step: a timeout likely means the interface is frozen and will not respond
-    to power commands, so the reset should proceed straight to bouncing the
-    interface.
-    """
+) -> PreResetPowerState:
+    """Read the adapter power state before a reset."""
     try:
-        return await adapter.get_powered(), False
+        return PreResetPowerState(await adapter.get_powered(), timed_out=False)
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not determine the power state of the Bluetooth adapter %s: %s",
@@ -811,14 +818,14 @@ async def _read_power_state_for_reset(
             adapter.name,
             adapter.timeout,
         )
-        return None, True
+        return PreResetPowerState(None, timed_out=True)
     except Exception:  # pylint: disable=broad-except
         # _LOGGER.exception already records the traceback, so no extra %s is needed.
         _LOGGER.exception(
             "Could not determine the power state of the Bluetooth adapter %s",
             adapter.name,
         )
-    return None, False
+    return PreResetPowerState(None, timed_out=False)
 
 
 async def _bring_adapter_up(adapter: MGMTBluetoothCtl) -> bool:
@@ -848,15 +855,13 @@ async def _bring_adapter_up(adapter: MGMTBluetoothCtl) -> bool:
 
 async def _execute_reset(adapter: MGMTBluetoothCtl) -> bool:
     """Execute the reset."""
-    (
-        power_state_before_reset,
-        timed_out_getting_powered,
-    ) = await _read_power_state_for_reset(adapter)
+    pre_reset = await _read_power_state_for_reset(adapter)
+    power_state_before_reset = pre_reset.power_state
 
     # Do not attempt to power off if it timed out getting the power state
     # as it likely means the adapter interface is frozen and will not respond to
     # power off commands so we need to proceed to bounce the interface
-    if not timed_out_getting_powered:
+    if not pre_reset.timed_out:
         try:
             await _execute_power_off(adapter, power_state_before_reset)
         except asyncio.TimeoutError:
