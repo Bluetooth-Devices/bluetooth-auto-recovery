@@ -38,7 +38,7 @@ PyRIC = ">=0.1.6.3"
 btsocket = ">=0.2.0"
 async-timeout = {version = ">=5.0.1", python = "<3.11"}
 usb-devices = ">=0.4.1"
-bluetooth-adapters = ">=0.16.0"
+bluetooth-adapters = ">=2.4.0"
 
 [tool.poetry.extras]
 docs = [
