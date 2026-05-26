@@ -101,48 +101,29 @@ def rfkill_unblock(adapter: MGMTBluetoothCtl, rfkill_idx: int) -> bool:
 
 def rfkill_list_bluetooth(adapter: MGMTBluetoothCtl) -> RFKillInfo:
     """Execute the rfkill list bluetooth command."""
+    undetermined = RFKillInfo(None, None, None)
     try:
         rfkill_dict = rfkill.rfkill_list()
-    except FileNotFoundError as ex:
+    except (FileNotFoundError, IndexError, PermissionError, UnicodeDecodeError) as ex:
         _LOGGER.debug(
-            "rfkill at /dev/rfkill is not accessible, cannot check bluetooth adapter %s: %s",
+            "RF kill switch check skipped for %s (%s): %s",
             adapter.name,
+            type(ex).__name__,
             ex,
         )
-        return RFKillInfo(None, None, None)
-    except IndexError as ex:
-        _LOGGER.debug(
-            "rfkill at /dev/rfkill returned unexpected results, cannot check bluetooth adapter %s: %s",
-            adapter.name,
-            ex,
-        )
-        return RFKillInfo(None, None, None)
-    except PermissionError as ex:
-        _LOGGER.debug(
-            "Access to rfkill at /dev/rfkill is not permitted, cannot check bluetooth adapter %s: %s",
-            adapter.name,
-            ex,
-        )
-        return RFKillInfo(None, None, None)
-    except UnicodeDecodeError as ex:
-        _LOGGER.debug(
-            "RF kill switch check failed - data for %s is not UTF-8 encoded: %s",
-            adapter.name,
-            ex,
-        )
-        return RFKillInfo(None, None, None)
+        return undetermined
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception("RF kill switch check failed")
-        return RFKillInfo(None, None, None)
-    try:
-        rfkill_hci_state = rfkill_dict[adapter.hci_name]
-    except KeyError:
+        _LOGGER.exception("RF kill switch check failed for %s", adapter.name)
+        return undetermined
+
+    rfkill_hci_state = rfkill_dict.get(adapter.hci_name)
+    if rfkill_hci_state is None:
         _LOGGER.debug(
             "RF kill switch check failed - no data for %s. Available data: %s",
             adapter.name,
             rfkill_dict,
         )
-        return RFKillInfo(None, None, None)
+        return undetermined
 
     return RFKillInfo(
         rfkill_hci_state["soft"], rfkill_hci_state["hard"], rfkill_hci_state["idx"]
