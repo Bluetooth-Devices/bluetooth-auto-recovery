@@ -32,7 +32,7 @@ python = ">=3.10,<3.15"
 
 # Documentation Dependencies
 Sphinx = {version = ">=5,<8", optional = true}
-sphinx-rtd-theme = {version = ">=1,<4", optional = true}
+sphinx-rtd-theme = {version = ">=3.1.0,<4", optional = true}
 myst-parser = {version = ">=4.0.1,<4.1", optional = true}
 PyRIC = ">=0.1.6.3"
 btsocket = ">=0.2.0"
