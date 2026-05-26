@@ -280,49 +280,70 @@ class MGMTBluetoothCtl:
         self.protocol = protocol
         await self._find_controller()
 
-    async def _find_controller(self) -> None:  # noqa: C901
+    async def _find_controller(self) -> None:
         """Find the controller."""
         assert self.protocol is not None  # noqa: S101  # nosec
+        if await self._match_from_hci_adapters():
+            return
+        if not await self._match_from_controller_index_list():
+            return
+        self._fallback_by_expected_hci_name()
+
+    async def _match_from_hci_adapters(self) -> bool:
+        """Try to identify the controller via the hci device list.
+
+        Returns True when a match has been recorded on ``self``.
+        """
         loop = asyncio.get_running_loop()
-        # Try to get the adapter index from the hci device first
-        # since it can see downed adapters.
-        if adapters_from_hci := await loop.run_in_executor(None, get_adapters_from_hci):
-            _LOGGER.debug("Found adapters from hci: %s", adapters_from_hci)
-            for adapter in adapters_from_hci.values():
-                if adapter["bdaddr"] == self._expected_bdaddr:
-                    self.idx = adapter["dev_id"]
-                    self.hci_name = adapter["name"]
-                    self.mac = adapter["bdaddr"]
-                    _LOGGER.debug(
-                        "Found adapter %s by mac in hci device as %s",
-                        self.mac,
-                        self.idx,
-                    )
-                    return
+        adapters_from_hci = await loop.run_in_executor(None, get_adapters_from_hci)
+        if not adapters_from_hci:
+            return False
+        _LOGGER.debug("Found adapters from hci: %s", adapters_from_hci)
+        for adapter in adapters_from_hci.values():
+            if adapter["bdaddr"] == self._expected_bdaddr:
+                self.idx = adapter["dev_id"]
+                self.hci_name = adapter["name"]
+                self.mac = adapter["bdaddr"]
+                _LOGGER.debug(
+                    "Found adapter %s by mac in hci device as %s",
+                    self.mac,
+                    self.idx,
+                )
+                return True
 
-            for adapter in adapters_from_hci.values():
-                if adapter["name"] == self._expected_hci_name:
-                    self.idx = adapter["dev_id"]
-                    self.hci_name = adapter["name"]
-                    self.mac = adapter["bdaddr"]
-                    _LOGGER.debug(
-                        "Found adapter %s by name as hci device %s as %s",
-                        self.mac,
-                        self._expected_hci_name,
-                        self.idx,
-                    )
-                    return
+        for adapter in adapters_from_hci.values():
+            if adapter["name"] == self._expected_hci_name:
+                self.idx = adapter["dev_id"]
+                self.hci_name = adapter["name"]
+                self.mac = adapter["bdaddr"]
+                _LOGGER.debug(
+                    "Found adapter %s by name as hci device %s as %s",
+                    self.mac,
+                    self._expected_hci_name,
+                    self.idx,
+                )
+                return True
+        return False
 
+    async def _match_from_controller_index_list(self) -> bool:
+        """Populate ``presented_list`` from the MGMT controller index list.
+
+        Returns False when the index list could not be read or is empty
+        (caller should stop). Returns True otherwise — a successful match
+        is recorded on ``self``; absence of a match leaves the caller free
+        to attempt the hci-name fallback.
+        """
+        assert self.protocol is not None  # noqa: S101  # nosec
         idxdata = await self.protocol.send("ReadControllerIndexList", None)
         if idxdata.event_frame.status.value != 0x00:  # 0x00 - Success
             _LOGGER.error(
                 "Unable to get hci controllers index list! Event frame status: %s",
                 idxdata.event_frame.status,
             )
-            return
+            return False
         if idxdata.cmd_response_frame.num_controllers == 0:
             _LOGGER.warning("There are no BT controllers present in the system!")
-            return
+            return False
         hci_idx_list = getattr(idxdata.cmd_response_frame, "controller_index[i]")
         _LOGGER.debug("hci_idx_list: %s", hci_idx_list)
         for idx in hci_idx_list:
@@ -338,7 +359,13 @@ class MGMTBluetoothCtl:
                 self.idx = idx
                 self.hci_name = f"hci{idx}"
                 self.mac = mac
-                return
+                break
+        return True
+
+    def _fallback_by_expected_hci_name(self) -> None:
+        """Match by expected hci name when no bdaddr match was found."""
+        if self.idx is not None:
+            return
         expected_hci = hci_name_to_number(self._expected_hci_name)
         if maybe_mac := self.presented_list.get(expected_hci):
             _LOGGER.warning(
