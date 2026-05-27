@@ -376,10 +376,9 @@ class MGMTBluetoothCtl:
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
+        protocol = self._require_protocol
         if self.idx is not None:
-            response = await self._require_protocol.send(
-                "ReadControllerInformation", self.idx
-            )
+            response = await protocol.send("ReadControllerInformation", self.idx)
             return response.cmd_response_frame.current_settings.get(
                 btmgmt_protocol.SupportedSettings.Powered
             )
@@ -396,6 +395,7 @@ class MGMTBluetoothCtl:
         self, new_state: bool, timeout: float
     ) -> bool | None:
         """Wait for the adapter to be powered on or off."""
+        _ = self._require_protocol
         current_state: bool | None = not new_state
         try:
             async with asyncio_timeout(timeout):
