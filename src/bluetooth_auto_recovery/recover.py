@@ -296,7 +296,12 @@ class MGMTBluetoothCtl:
         except asyncio.TimeoutError:
             btmgmt_socket.close(sock)
             raise
-        assert isinstance(protocol, BluetoothMGMTProtocol)  # noqa: S101  # nosec
+        if not isinstance(protocol, BluetoothMGMTProtocol):
+            msg = (
+                "Unexpected protocol type from connection transport: "
+                f"{type(protocol).__name__}"
+            )
+            raise TypeError(msg)
         self.protocol = protocol
         await self._find_controller()
 
