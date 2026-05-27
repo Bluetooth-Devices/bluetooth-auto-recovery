@@ -243,6 +243,30 @@ class MGMTBluetoothCtl:
             raise RuntimeError(msg)
         return self.protocol
 
+    @property
+    def require_idx(self) -> int:
+        """Return the controller index, raising if not yet discovered.
+
+        ``self.idx`` is populated by ``_find_controller``. Helpers that need
+        the index after setup use this accessor to avoid the strip-``-O``-
+        unsafe ``assert adapter.idx is not None`` pattern.
+        """
+        if self.idx is None:
+            msg = f"{type(self).__name__} controller index not discovered"
+            raise RuntimeError(msg)
+        return self.idx
+
+    @property
+    def require_hci_name(self) -> str:
+        """Return the hci device name, raising if not yet discovered.
+
+        Mirror of :pyattr:`require_idx` for ``self.hci_name``.
+        """
+        if self.hci_name is None:
+            msg = f"{type(self).__name__} hci_name not discovered"
+            raise RuntimeError(msg)
+        return self.hci_name
+
     async def close(self) -> None:
         """Close the management interface."""
         if self.protocol and self.protocol.transport:
@@ -742,8 +766,7 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
     adapter is a USB device) and, if so, whether it succeeded. A non-USB
     adapter (e.g. a built-in UART controller) yields a not-applicable outcome.
     """
-    assert adapter.hci_name is not None  # noqa: S101  # nosec
-    hci = hci_name_to_number(adapter.hci_name)
+    hci = hci_name_to_number(adapter.require_hci_name)
     _LOGGER.debug("Executing USB reset for Bluetooth adapter hci%i", hci)
     dev = BluetoothDevice(hci)
     try:
@@ -792,10 +815,10 @@ async def _bounce_adapter_interface(
 ) -> None:
     """Bounce the adapter ex. hciconfig down/up."""
     loop = asyncio.get_running_loop()
-    assert adapter.idx is not None, "Adapter must have an idx"  # noqa: S101  # nosec
-    sock = await loop.run_in_executor(None, raw_open, adapter.idx)
+    idx = adapter.require_idx
+    sock = await loop.run_in_executor(None, raw_open, idx)
     try:
-        _LOGGER.debug("Bouncing Bluetooth adapter hci%i", adapter.idx)
+        _LOGGER.debug("Bouncing Bluetooth adapter hci%i", idx)
         if down:
             await _set_adapter_up_down(adapter, sock, loop, HCIDEVDOWN, "down")
             await asyncio.sleep(0.5)

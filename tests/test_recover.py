@@ -160,6 +160,18 @@ def test_require_protocol_raises_before_setup() -> None:
         _ = ctl._require_protocol
 
 
+def test_require_idx_raises_before_discovery() -> None:
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    with pytest.raises(RuntimeError, match="controller index not discovered"):
+        _ = ctl.require_idx
+
+
+def test_require_hci_name_raises_before_discovery() -> None:
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    with pytest.raises(RuntimeError, match="hci_name not discovered"):
+        _ = ctl.require_hci_name
+
+
 @pytest.mark.asyncio
 async def test_get_powered(adapter: MGMTBluetoothCtl) -> None:
     response = MagicMock()
