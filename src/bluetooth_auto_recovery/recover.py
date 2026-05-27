@@ -228,6 +228,21 @@ class MGMTBluetoothCtl:
         """Return the name of the adapter."""
         return f"{self.hci_name} [{self.mac}] ({self.idx})"
 
+    @property
+    def _require_protocol(self) -> BluetoothMGMTProtocol:
+        """Return the protocol, raising if the adapter has not been set up.
+
+        Methods that talk to the kernel via MGMT can only run after ``setup()``
+        has populated ``self.protocol``. Returning the narrowed type from a
+        single accessor avoids the ``assert self.protocol is not None`` pattern
+        at every call site — asserts are stripped under ``python -O`` and a
+        ``NoneType has no attribute 'send'`` is a worse error than a typed one.
+        """
+        if self.protocol is None:
+            msg = f"{type(self).__name__}.setup() has not been called"
+            raise RuntimeError(msg)
+        return self.protocol
+
     async def close(self) -> None:
         """Close the management interface."""
         if self.protocol and self.protocol.transport:
@@ -263,7 +278,6 @@ class MGMTBluetoothCtl:
 
     async def _find_controller(self) -> None:
         """Find the controller."""
-        assert self.protocol is not None  # noqa: S101  # nosec
         if await self._match_from_hci_adapters():
             return
         if not await self._match_from_controller_index_list():
@@ -314,8 +328,8 @@ class MGMTBluetoothCtl:
         is recorded on ``self``; absence of a match leaves the caller free
         to attempt the hci-name fallback.
         """
-        assert self.protocol is not None  # noqa: S101  # nosec
-        idxdata = await self.protocol.send("ReadControllerIndexList", None)
+        protocol = self._require_protocol
+        idxdata = await protocol.send("ReadControllerIndexList", None)
         if idxdata.event_frame.status.value != 0x00:  # 0x00 - Success
             _LOGGER.error(
                 "Unable to get hci controllers index list! Event frame status: %s",
@@ -328,7 +342,7 @@ class MGMTBluetoothCtl:
         hci_idx_list = getattr(idxdata.cmd_response_frame, "controller_index[i]")
         _LOGGER.debug("hci_idx_list: %s", hci_idx_list)
         for idx in hci_idx_list:
-            hci_info = await self.protocol.send("ReadControllerInformation", idx)
+            hci_info = await protocol.send("ReadControllerInformation", idx)
             _LOGGER.debug("controller idx %s: %s", idx, hci_info)
             response = hci_info.cmd_response_frame
             mac: str = response.address.upper()
@@ -362,9 +376,9 @@ class MGMTBluetoothCtl:
 
     async def get_powered(self) -> bool | None:
         """Powered state of the interface."""
-        assert self.protocol is not None  # noqa: S101  # nosec
+        protocol = self._require_protocol
         if self.idx is not None:
-            response = await self.protocol.send("ReadControllerInformation", self.idx)
+            response = await protocol.send("ReadControllerInformation", self.idx)
             return response.cmd_response_frame.current_settings.get(
                 btmgmt_protocol.SupportedSettings.Powered
             )
@@ -372,8 +386,7 @@ class MGMTBluetoothCtl:
 
     async def set_powered(self, new_state: bool) -> bool:
         """Set the powered state of the interface."""
-        assert self.protocol is not None  # noqa: S101  # nosec
-        response = await self.protocol.send(
+        response = await self._require_protocol.send(
             "SetPowered", self.idx, int(new_state is True)
         )
         return response.event_frame.status.value == 0x00  # 0x00 - Success
@@ -382,7 +395,7 @@ class MGMTBluetoothCtl:
         self, new_state: bool, timeout: float
     ) -> bool | None:
         """Wait for the adapter to be powered on or off."""
-        assert self.protocol is not None  # noqa: S101  # nosec
+        _ = self._require_protocol
         current_state: bool | None = not new_state
         try:
             async with asyncio_timeout(timeout):

@@ -154,6 +154,12 @@ async def test_close_no_protocol() -> None:
     mock_close.assert_called_once_with(ctl.sock)
 
 
+def test_require_protocol_raises_before_setup() -> None:
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    with pytest.raises(RuntimeError, match="setup\\(\\) has not been called"):
+        _ = ctl._require_protocol
+
+
 @pytest.mark.asyncio
 async def test_get_powered(adapter: MGMTBluetoothCtl) -> None:
     response = MagicMock()
