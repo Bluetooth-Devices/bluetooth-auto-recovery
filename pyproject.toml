@@ -88,12 +88,11 @@ select = [
 ]
 ignore = [
     "ANN401", "ASYNC109", "D100", "D101", "D102", "D103", "D104", "D105",
-    "D106", "D107", "D203", "D213", "E501", "E721", "PLR0911", "PLR0912",
-    "PLR0913", "PLR0915", "PLR2004", "PLW2901", "TRY003", "TID252"
+    "D106", "D107", "D203", "D213", "E501", "E721", "TID252"
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ANN", "ARG", "S101", "S106", "SLF"]
+"tests/**" = ["ANN", "ARG", "PLR2004", "S101", "S106", "SLF"]
 "docs/**" = ["A001", "ERA001", "INP001"]
 "examples/**" = ["INP001"]
 
