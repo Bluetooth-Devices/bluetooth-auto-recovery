@@ -1224,6 +1224,26 @@ async def test_setup_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_setup_raises_on_unexpected_protocol_type() -> None:
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    sock = MagicMock()
+    loop = asyncio.get_running_loop()
+
+    async def fake_create(sock_arg, factory, *args, **kwargs):
+        # Drive the connection_made_future, then return a wrong-type protocol.
+        proto = factory()
+        proto.connection_made(MagicMock())
+        return (MagicMock(), MagicMock(spec=object))
+
+    with (
+        patch.object(recover.btmgmt_socket, "open", return_value=sock),
+        patch.object(loop, "_create_connection_transport", fake_create),
+        pytest.raises(TypeError, match="Unexpected protocol type"),
+    ):
+        await ctl.setup()
+
+
+@pytest.mark.asyncio
 async def test_setup_timeout_closes_socket() -> None:
     ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
     sock = MagicMock()
