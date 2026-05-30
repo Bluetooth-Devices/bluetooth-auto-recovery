@@ -1,7 +1,7 @@
 [project]
 name = "bluetooth-auto-recovery"
 version = "1.6.4"
-description = "Recover bluetooth adapters that are in an stuck state"
+description = "Recover bluetooth adapters that are in a stuck state"
 authors = [{ name = "J. Nick Koston", email = "nick@koston.org" }]
 license = "MIT"
 readme = "README.md"

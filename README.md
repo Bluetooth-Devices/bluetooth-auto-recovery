@@ -30,7 +30,7 @@
   <img src="https://img.shields.io/pypi/l/bluetooth-auto-recovery.svg?style=flat-square" alt="License">
 </p>
 
-Recover bluetooth adapters that are in an stuck state
+Recover bluetooth adapters that are in a stuck state
 
 ## Credits
 
