@@ -32,7 +32,7 @@
 
 Recover bluetooth adapters that are in a stuck state
 
-## Credits
+## Acknowledgements
 
 The code in this repo originates from https://github.com/custom-components/ble_monitor/blob/master/custom_components/ble_monitor/bt_helpers.py
 
