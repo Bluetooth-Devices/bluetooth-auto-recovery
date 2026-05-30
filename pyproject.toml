@@ -60,6 +60,7 @@ build_command = "pip install poetry && poetry build"
 
 [tool.pytest.ini_options]
 addopts = "-v -Wdefault --cov=bluetooth_auto_recovery --cov-report=term-missing:skip-covered"
+asyncio_default_fixture_loop_scope = "function"
 pythonpath = ["src"]
 
 [tool.coverage.run]
