@@ -42,7 +42,7 @@ myst-parser = {version = ">=4.0.1,<4.1", optional = true}
 PyRIC = ">=0.1.6.3"
 btsocket = ">=0.2.0"
 async-timeout = {version = ">=5.0.1", python = "<3.11"}
-usb-devices = ">=0.4.1"
+usb-devices = ">=0.5.1"
 bluetooth-adapters = ">=2.4.0"
 
 [tool.poetry.extras]
