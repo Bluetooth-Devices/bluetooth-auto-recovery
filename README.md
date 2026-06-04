@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/bluetooth-devices/bluetooth-auto-recovery/actions?query=workflow%3ACI">
-    <img src="https://img.shields.io/github/workflow/status/bluetooth-devices/bluetooth-auto-recovery/CI/main?label=CI&logo=github&style=flat-square" alt="CI Status" >
+    <img src="https://img.shields.io/github/actions/workflow/status/bluetooth-devices/bluetooth-auto-recovery/ci.yml?branch=main&label=CI&logo=github&style=flat-square" alt="CI Status" >
   </a>
   <a href="https://bluetooth-auto-recovery.readthedocs.io">
     <img src="https://img.shields.io/readthedocs/bluetooth-auto-recovery.svg?logo=read-the-docs&logoColor=fff&style=flat-square" alt="Documentation Status">
