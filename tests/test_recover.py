@@ -666,10 +666,7 @@ async def test_execute_power_off_when_on(adapter: MGMTBluetoothCtl) -> None:
         patch.object(adapter, "set_powered", set_powered),
         patch.object(adapter, "wait_for_power_state", AsyncMock(return_value=False)),
     ):
-        assert (
-            await recover._execute_power_off(adapter, power_state_before_reset=True)
-            is True
-        )
+        await recover._execute_power_off(adapter, power_state_before_reset=True)
     set_powered.assert_awaited_once_with(False)
 
 
@@ -677,10 +674,7 @@ async def test_execute_power_off_when_on(adapter: MGMTBluetoothCtl) -> None:
 async def test_execute_power_off_when_off(adapter: MGMTBluetoothCtl) -> None:
     set_powered = AsyncMock()
     with patch.object(adapter, "set_powered", set_powered):
-        assert (
-            await recover._execute_power_off(adapter, power_state_before_reset=False)
-            is True
-        )
+        await recover._execute_power_off(adapter, power_state_before_reset=False)
     set_powered.assert_not_called()
 
 
@@ -688,21 +682,18 @@ async def test_execute_power_off_when_off(adapter: MGMTBluetoothCtl) -> None:
 async def test_execute_power_off_unknown_state(adapter: MGMTBluetoothCtl) -> None:
     set_powered = AsyncMock()
     with patch.object(adapter, "set_powered", set_powered):
-        assert (
-            await recover._execute_power_off(adapter, power_state_before_reset=None)
-            is False
-        )
+        await recover._execute_power_off(adapter, power_state_before_reset=None)
+    # Unknown power state: set_powered must not be called.
+    set_powered.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_execute_power_off_attribute_error(adapter: MGMTBluetoothCtl) -> None:
-    with patch.object(
-        adapter, "set_powered", AsyncMock(side_effect=AttributeError("gone"))
-    ):
-        assert (
-            await recover._execute_power_off(adapter, power_state_before_reset=True)
-            is False
-        )
+    set_powered = AsyncMock(side_effect=AttributeError("gone"))
+    with patch.object(adapter, "set_powered", set_powered):
+        await recover._execute_power_off(adapter, power_state_before_reset=True)
+    # set_powered was called; AttributeError was swallowed (early return).
+    set_powered.assert_awaited_once_with(False)
 
 
 # ---------------------------------------------------------------------------
@@ -788,7 +779,7 @@ async def test_bounce_adapter_interface_down_only(adapter: MGMTBluetoothCtl) -> 
 async def test_execute_reset_happy_path(adapter: MGMTBluetoothCtl) -> None:
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
     ):
@@ -799,7 +790,7 @@ async def test_execute_reset_happy_path(adapter: MGMTBluetoothCtl) -> None:
 async def test_execute_reset_power_on_fails(adapter: MGMTBluetoothCtl) -> None:
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=False)),
     ):
@@ -810,7 +801,7 @@ async def test_execute_reset_power_on_fails(adapter: MGMTBluetoothCtl) -> None:
 async def test_execute_reset_skips_power_off_on_timeout(
     adapter: MGMTBluetoothCtl,
 ) -> None:
-    power_off = AsyncMock(return_value=True)
+    power_off = AsyncMock()
     with (
         patch.object(
             adapter, "get_powered", AsyncMock(side_effect=asyncio.TimeoutError())
@@ -832,7 +823,7 @@ async def test_execute_reset_final_bounce_already_up(adapter: MGMTBluetoothCtl) 
 
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
     ):
@@ -847,7 +838,7 @@ async def test_execute_reset_final_bounce_oserror(adapter: MGMTBluetoothCtl) -> 
 
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
     ):
@@ -866,7 +857,7 @@ async def test_execute_reset_final_bounce_unexpected_error(
 
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
     ):
@@ -880,7 +871,7 @@ async def test_execute_reset_get_powered_error_continues(
 ) -> None:
     # If reading the initial power state fails (but does not time out), the reset
     # still proceeds: power-off is attempted, then bounce + power-on decide.
-    power_off = AsyncMock(return_value=True)
+    power_off = AsyncMock()
     with (
         patch.object(adapter, "get_powered", AsyncMock(side_effect=exc)),
         patch.object(recover, "_execute_power_off", power_off),
@@ -917,7 +908,7 @@ async def test_execute_reset_first_bounce_error_is_swallowed(
 
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", side_effect=bounce),
         patch.object(recover, "_execute_power_on", AsyncMock(return_value=True)),
     ):
@@ -932,7 +923,7 @@ async def test_execute_reset_power_on_error_fails(
     # A timeout or unexpected error while powering back on fails the reset.
     with (
         patch.object(adapter, "get_powered", AsyncMock(return_value=True)),
-        patch.object(recover, "_execute_power_off", AsyncMock(return_value=True)),
+        patch.object(recover, "_execute_power_off", AsyncMock()),
         patch.object(recover, "_bounce_adapter_interface", AsyncMock()),
         patch.object(recover, "_execute_power_on", AsyncMock(side_effect=exc)),
     ):
