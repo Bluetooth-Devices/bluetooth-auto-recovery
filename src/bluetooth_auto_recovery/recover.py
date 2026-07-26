@@ -423,9 +423,13 @@ class MGMTBluetoothCtl:
     async def wait_for_power_state(
         self, new_state: bool, timeout: float
     ) -> bool | None:
-        """Wait for the adapter to be powered on or off."""
+        """Wait for the adapter to be powered on or off.
+
+        Returns ``None`` when the power state could never be read, which is
+        distinct from having read the opposite of ``new_state``.
+        """
         _ = self._require_protocol
-        current_state: bool | None = not new_state
+        current_state: bool | None = None
         try:
             async with asyncio_timeout(timeout):
                 while True:
@@ -958,7 +962,7 @@ async def _execute_power_on(
 ) -> bool:
     """Execute the power off."""
     try:
-        await adapter.set_powered(True)
+        powered_ok = await adapter.set_powered(True)
     except AttributeError as ex:
         _LOGGER.warning(
             "Could not re-enable power after cycle of the Bluetooth adapter %s: %s",
@@ -966,6 +970,12 @@ async def _execute_power_on(
             ex,
         )
         return False
+
+    if not powered_ok:
+        _LOGGER.warning(
+            "The kernel rejected the request to power on the Bluetooth adapter %s",
+            adapter.name,
+        )
 
     pstate_after = await adapter.wait_for_power_state(True, POWER_ON_TIME)
 
