@@ -458,13 +458,25 @@ async def _unblock_rfkill(adapter: MGMTBluetoothCtl, rfkill_idx: int) -> bool:
     loop = asyncio.get_running_loop()
     try:
         async with asyncio_timeout(MAX_RFKILL_TIME):
-            return await loop.run_in_executor(None, rfkill_unblock, adapter, rfkill_idx)
+            if await loop.run_in_executor(None, rfkill_unblock, adapter, rfkill_idx):
+                return True
     except asyncio.TimeoutError:
         _LOGGER.warning(
             "Unblocking rfkill for %s with idx:%s timed out after %s seconds!",
             adapter.name,
             rfkill_idx,
             MAX_RFKILL_TIME,
+        )
+    else:
+        # A rejected unblock is silent otherwise: the caller discards the
+        # return value and keeps polling, so the only user-visible trace is a
+        # generic "could not be unblocked" once the grace period expires. On
+        # headless installs these logs are the whole post-mortem — say which
+        # of the two happened.
+        _LOGGER.warning(
+            "Unblocking rfkill for %s with idx:%s was rejected by the kernel",
+            adapter.name,
+            rfkill_idx,
         )
 
     return False
@@ -473,8 +485,10 @@ async def _unblock_rfkill(adapter: MGMTBluetoothCtl, rfkill_idx: int) -> bool:
 async def _check_or_unblock_rfkill(adapter: MGMTBluetoothCtl) -> bool:
     """Check if rfkill is blocked, and try to unblock if possible.
 
-    Returns False if the adapter is blocked or the state
-    could not be determined.
+    Returns False if the adapter is hard blocked, or if it is soft blocked and
+    the block could not be cleared. An rfkill state that cannot be determined at
+    all is not a failure: an unreadable /dev/rfkill must not abort recovery, so
+    that case returns True and lets the caller proceed.
     """
     rfkill_info = await _check_rfkill(adapter)
     if rfkill_info.idx is None:
