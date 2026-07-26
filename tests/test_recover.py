@@ -400,6 +400,17 @@ async def test_unblock_rfkill_success(adapter: MGMTBluetoothCtl) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unblock_rfkill_rejected_warns(
+    adapter: MGMTBluetoothCtl, caplog: pytest.LogCaptureFixture
+) -> None:
+    # A kernel rejection is not a timeout; without its own warning the only
+    # trace is the generic "could not be unblocked" a grace period later.
+    with patch.object(recover, "rfkill_unblock", return_value=False):
+        assert await recover._unblock_rfkill(adapter, 3) is False
+    assert "was rejected by the kernel" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_unblock_rfkill_timeout(adapter: MGMTBluetoothCtl) -> None:
     # asyncio_timeout wraps the executor call; force it to expire fast.
     with (

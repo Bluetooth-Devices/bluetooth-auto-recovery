@@ -458,13 +458,25 @@ async def _unblock_rfkill(adapter: MGMTBluetoothCtl, rfkill_idx: int) -> bool:
     loop = asyncio.get_running_loop()
     try:
         async with asyncio_timeout(MAX_RFKILL_TIME):
-            return await loop.run_in_executor(None, rfkill_unblock, adapter, rfkill_idx)
+            if await loop.run_in_executor(None, rfkill_unblock, adapter, rfkill_idx):
+                return True
     except asyncio.TimeoutError:
         _LOGGER.warning(
             "Unblocking rfkill for %s with idx:%s timed out after %s seconds!",
             adapter.name,
             rfkill_idx,
             MAX_RFKILL_TIME,
+        )
+    else:
+        # A rejected unblock is silent otherwise: the caller discards the
+        # return value and keeps polling, so the only user-visible trace is a
+        # generic "could not be unblocked" once the grace period expires. On
+        # headless installs these logs are the whole post-mortem — say which
+        # of the two happened.
+        _LOGGER.warning(
+            "Unblocking rfkill for %s with idx:%s was rejected by the kernel",
+            adapter.name,
+            rfkill_idx,
         )
 
     return False
