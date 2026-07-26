@@ -215,6 +215,25 @@ async def test_wait_for_power_state_times_out(adapter: MGMTBluetoothCtl) -> None
         assert await adapter.wait_for_power_state(True, 0.05) is False
 
 
+@pytest.mark.asyncio
+async def test_wait_for_power_state_never_read(adapter: MGMTBluetoothCtl) -> None:
+    """A read that never completes stays unknown instead of reporting a state."""
+
+    async def _hang() -> bool:
+        await asyncio.sleep(10)
+        return False
+
+    with patch.object(adapter, "get_powered", _hang):
+        assert await adapter.wait_for_power_state(True, 0.05) is None
+
+
+@pytest.mark.asyncio
+async def test_wait_for_power_state_unknown_reading(adapter: MGMTBluetoothCtl) -> None:
+    """An adapter that reports an unknown power state times out as unknown."""
+    with patch.object(adapter, "get_powered", AsyncMock(return_value=None)):
+        assert await adapter.wait_for_power_state(True, 0.05) is None
+
+
 # ---------------------------------------------------------------------------
 # MGMTBluetoothCtl._find_controller
 # ---------------------------------------------------------------------------
@@ -639,6 +658,23 @@ async def test_execute_power_on_state_unknown(adapter: MGMTBluetoothCtl) -> None
             await recover._execute_power_on(adapter, power_state_before_reset=True)
             is False
         )
+
+
+@pytest.mark.asyncio
+async def test_execute_power_on_kernel_rejects(
+    adapter: MGMTBluetoothCtl, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A rejected SetPowered is warned about, but recovery still checks the state."""
+    with (
+        patch.object(adapter, "set_powered", AsyncMock(return_value=False)),
+        patch.object(adapter, "wait_for_power_state", AsyncMock(return_value=True)),
+        caplog.at_level(logging.WARNING),
+    ):
+        assert (
+            await recover._execute_power_on(adapter, power_state_before_reset=True)
+            is True
+        )
+    assert "kernel rejected the request to power on" in caplog.text
 
 
 @pytest.mark.asyncio
