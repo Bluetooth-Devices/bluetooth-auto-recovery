@@ -786,7 +786,17 @@ async def _usb_reset_adapter(adapter: MGMTBluetoothCtl) -> USBResetOutcome:
         )
         return USBResetOutcome.NOT_APPLICABLE
     except FileNotFoundError as ex:
-        _LOGGER.debug("hci%s not found while attempting USB reset: %s", hci, ex)
+        if dev.device_path.is_symlink():
+            # The controller still has a parent device, so the missing path is
+            # somewhere in the USB tree below it: the USB device went away and
+            # there is nothing left to reset.
+            _LOGGER.warning("hci%s disappeared while attempting USB reset: %s", hci, ex)
+            return USBResetOutcome.FAILED
+        # No parent device at all (e.g. a virtual controller), so the adapter
+        # is not backed by USB and a USB reset does not apply.
+        _LOGGER.debug(
+            "hci%s has no parent device while attempting USB reset: %s", hci, ex
+        )
         return USBResetOutcome.NOT_APPLICABLE
     except PermissionError as ex:
         _LOGGER.info(
