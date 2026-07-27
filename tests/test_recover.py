@@ -674,6 +674,49 @@ async def test_execute_power_off_when_on(adapter: MGMTBluetoothCtl) -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_power_off_kernel_rejects(
+    adapter: MGMTBluetoothCtl, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A rejected SetPowered(False) is warned about instead of being discarded."""
+    with (
+        patch.object(adapter, "set_powered", AsyncMock(return_value=False)),
+        patch.object(adapter, "wait_for_power_state", AsyncMock(return_value=False)),
+        caplog.at_level(logging.WARNING),
+    ):
+        assert (
+            await recover._execute_power_off(adapter, power_state_before_reset=True)
+            is True
+        )
+    assert "kernel rejected the request to power off" in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("pstate_after", "expected"), [(True, "still ON"), (None, "unknown")]
+)
+async def test_execute_power_off_never_confirms(
+    adapter: MGMTBluetoothCtl,
+    caplog: pytest.LogCaptureFixture,
+    pstate_after: bool | None,
+    expected: str,
+) -> None:
+    """An adapter that never reports OFF is warned about, not silently cycled."""
+    with (
+        patch.object(adapter, "set_powered", AsyncMock(return_value=True)),
+        patch.object(
+            adapter, "wait_for_power_state", AsyncMock(return_value=pstate_after)
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        assert (
+            await recover._execute_power_off(adapter, power_state_before_reset=True)
+            is True
+        )
+    assert "did not power off within" in caplog.text
+    assert expected in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_execute_power_off_when_off(adapter: MGMTBluetoothCtl) -> None:
     set_powered = AsyncMock()
     with patch.object(adapter, "set_powered", set_powered):
