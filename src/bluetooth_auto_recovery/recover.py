@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import array
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
@@ -12,7 +11,6 @@ from functools import cached_property
 import logging
 from pathlib import Path
 import socket
-import struct
 
 try:
     from fcntl import ioctl
@@ -809,10 +807,13 @@ async def _set_adapter_up_down(
     state: str,
 ) -> None:
     """Set the adapter up or down."""
-    req_str = struct.pack("H", adapter.idx)
-    request = array.array("b", req_str)
-    _LOGGER.debug("Setting hci%i %s", adapter.idx, state)
-    await loop.run_in_executor(None, ioctl, sock.fileno(), code, request[0])
+    # HCIDEVUP/HCIDEVDOWN take the device id as a plain integer argument, so
+    # pass it straight through. Packing it into a 2-byte struct and handing the
+    # first signed byte to ioctl() truncated the index: hci200 became -56 and
+    # hci256 became 0, which would bounce hci0 instead of the target adapter.
+    idx = adapter.require_idx
+    _LOGGER.debug("Setting hci%i %s", idx, state)
+    await loop.run_in_executor(None, ioctl, sock.fileno(), code, idx)
 
 
 async def _bounce_adapter_interface(
@@ -830,7 +831,7 @@ async def _bounce_adapter_interface(
         if up:
             await _set_adapter_up_down(adapter, sock, loop, HCIDEVUP, "up")
             await asyncio.sleep(0.5)
-        _LOGGER.debug("Finished bouncing hci%i", adapter.idx)
+        _LOGGER.debug("Finished bouncing hci%i", idx)
     finally:
         await loop.run_in_executor(None, raw_close, sock)
 

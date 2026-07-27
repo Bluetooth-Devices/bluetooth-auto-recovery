@@ -711,14 +711,36 @@ async def test_execute_power_off_attribute_error(adapter: MGMTBluetoothCtl) -> N
 
 
 @pytest.mark.asyncio
-async def test_set_adapter_up_down_passes_low_byte(adapter: MGMTBluetoothCtl) -> None:
-    adapter.idx = 0
+@pytest.mark.parametrize("idx", [0, 1, 127, 128, 200, 256, 300])
+async def test_set_adapter_up_down_passes_the_adapter_index(
+    adapter: MGMTBluetoothCtl, idx: int
+) -> None:
+    """The ioctl must receive the adapter index itself, whatever its value.
+
+    The index used to be packed into a 2-byte struct and truncated to its
+    first signed byte, so hci128 became -128 and hci256 became 0 — bouncing
+    hci0 rather than the adapter that was asked for.
+    """
+    adapter.idx = idx
     sock = MagicMock()
     sock.fileno.return_value = 9
     loop = asyncio.get_running_loop()
     with patch.object(recover, "ioctl") as mock_ioctl:
         await recover._set_adapter_up_down(adapter, sock, loop, recover.HCIDEVUP, "up")
-    mock_ioctl.assert_called_once_with(9, recover.HCIDEVUP, 0)
+    mock_ioctl.assert_called_once_with(9, recover.HCIDEVUP, idx)
+
+
+@pytest.mark.asyncio
+async def test_set_adapter_up_down_requires_a_discovered_index(
+    adapter: MGMTBluetoothCtl,
+) -> None:
+    """An undiscovered index raises rather than reaching the ioctl."""
+    adapter.idx = None
+    with patch.object(recover, "ioctl") as mock_ioctl, pytest.raises(RuntimeError):
+        await recover._set_adapter_up_down(
+            adapter, MagicMock(), asyncio.get_running_loop(), recover.HCIDEVUP, "up"
+        )
+    mock_ioctl.assert_not_called()
 
 
 @pytest.mark.asyncio
