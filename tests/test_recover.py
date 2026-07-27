@@ -1011,6 +1011,17 @@ async def test_get_adapter_yields_none_on_setup_error(exc: Exception) -> None:
             assert got is None
 
 
+def _raise(exc: BaseException) -> None:
+    """Raise ``exc`` from inside a ``with`` body.
+
+    A bare ``raise`` statement would make everything after the enclosing
+    ``with`` unreachable to mypy: the pre-commit hook runs without pytest
+    installed, so ``pytest.raises`` is ``Any`` and is not credited with
+    suppressing the exception.
+    """
+    raise exc
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "exc",
@@ -1037,7 +1048,7 @@ async def test_get_adapter_propagates_body_error(
         pytest.raises(type(exc)) as caught,
     ):
         async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF"):
-            raise exc
+            _raise(exc)
     assert caught.value is exc
     ctl.close.assert_awaited_once()
     assert "Getting Bluetooth adapter" not in caplog.text
