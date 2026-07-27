@@ -1002,13 +1002,29 @@ async def _execute_power_off(
     if power_state_before_reset is True:
         _LOGGER.debug("Current power state of bluetooth adapter is ON.")
         try:
-            await adapter.set_powered(False)
+            powered_off_ok = await adapter.set_powered(False)
         except AttributeError as ex:
             _LOGGER.warning(
                 "Could not power cycle the Bluetooth adapter %s: %s", adapter.name, ex
             )
             return False
-        await adapter.wait_for_power_state(False, POWER_OFF_TIME)
+        if not powered_off_ok:
+            _LOGGER.warning(
+                "The kernel rejected the request to power off the Bluetooth adapter %s",
+                adapter.name,
+            )
+        # The caller bounces the interface either way, but a power cycle that
+        # never de-powered the adapter is not the recovery the logs claim it is.
+        # Say so here: otherwise the only trace is a later "power state is ON
+        # after power cycle" debug line, which reads as success.
+        pstate_after = await adapter.wait_for_power_state(False, POWER_OFF_TIME)
+        if pstate_after is not False:
+            _LOGGER.warning(
+                "Bluetooth adapter %s did not power off within %s seconds (state: %s)",
+                adapter.name,
+                POWER_OFF_TIME,
+                "still ON" if pstate_after else "unknown",
+            )
     elif power_state_before_reset is False:
         _LOGGER.debug(
             "Current power state of bluetooth adapter %s is OFF, trying to turn it back ON",
