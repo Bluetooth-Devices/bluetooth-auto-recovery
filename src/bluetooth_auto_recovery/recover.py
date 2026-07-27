@@ -692,38 +692,44 @@ async def _get_adapter(
     """Get the adapter."""
     name = f"{hci_name} [{mac}]"
     _LOGGER.debug("Attempting to power cycle bluetooth adapter %s", name)
-    adapter = None
+    adapter: MGMTBluetoothCtl | None = None
     try:
-        adapter = MGMTBluetoothCtl(hci_name, mac, MGMT_PROTOCOL_TIMEOUT)
-        await adapter.setup()
-        _LOGGER.debug(
-            "_get_adapter: %s (hci_name=%s) (mac=%s) (idx=%s)",
-            name,
-            adapter.hci_name,
-            adapter.mac,
-            adapter.idx,
-        )
-        if adapter.idx is not None:
-            yield adapter
-        else:
-            yield None
-    except btmgmt_socket.BluetoothSocketError as ex:
-        _LOGGER.warning(
-            "Getting Bluetooth adapter failed %s "
-            "because the system cannot create a bluetooth socket: %s",
-            name,
-            ex,
-        )
-        yield None
-    except asyncio.TimeoutError:
-        # On Python 3.11+ asyncio.TimeoutError is an alias of the builtin
-        # TimeoutError, which subclasses OSError, so this must precede the
-        # OSError handler or the timeout-specific message is never emitted.
-        _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
-        yield None
-    except OSError as ex:
-        _LOGGER.warning("Getting Bluetooth adapter %s failed: %s", name, ex)
-        yield None
+        # The setup handlers below must not see exceptions raised by the caller's
+        # ``async with`` body: @asynccontextmanager re-raises those at the yield
+        # point, so a yield inside the try would let a body-side OSError be
+        # logged as a setup failure and then trigger a second yield, which
+        # asynccontextmanager turns into "generator didn't stop after athrow()"
+        # — losing the real exception. Resolve what to hand out first, then
+        # yield exactly once, outside the try that catches setup errors.
+        ready: MGMTBluetoothCtl | None = None
+        try:
+            adapter = MGMTBluetoothCtl(hci_name, mac, MGMT_PROTOCOL_TIMEOUT)
+            await adapter.setup()
+            _LOGGER.debug(
+                "_get_adapter: %s (hci_name=%s) (mac=%s) (idx=%s)",
+                name,
+                adapter.hci_name,
+                adapter.mac,
+                adapter.idx,
+            )
+            if adapter.idx is not None:
+                ready = adapter
+        except btmgmt_socket.BluetoothSocketError as ex:
+            _LOGGER.warning(
+                "Getting Bluetooth adapter failed %s "
+                "because the system cannot create a bluetooth socket: %s",
+                name,
+                ex,
+            )
+        except asyncio.TimeoutError:
+            # On Python 3.11+ asyncio.TimeoutError is an alias of the builtin
+            # TimeoutError, which subclasses OSError, so this must precede the
+            # OSError handler or the timeout-specific message is never emitted.
+            _LOGGER.warning("Getting Bluetooth adapter %s failed due to timeout", name)
+        except OSError as ex:
+            _LOGGER.warning("Getting Bluetooth adapter %s failed: %s", name, ex)
+
+        yield ready
     finally:
         if adapter:
             try:

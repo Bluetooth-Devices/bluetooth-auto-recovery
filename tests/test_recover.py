@@ -1011,6 +1011,49 @@ async def test_get_adapter_yields_none_on_setup_error(exc: Exception) -> None:
             assert got is None
 
 
+def _raise(exc: BaseException) -> None:
+    """Raise ``exc`` from inside a ``with`` body.
+
+    A bare ``raise`` statement would make everything after the enclosing
+    ``with`` unreachable to mypy: the pre-commit hook runs without pytest
+    installed, so ``pytest.raises`` is ``Any`` and is not credited with
+    suppressing the exception.
+    """
+    raise exc
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "exc",
+    [
+        recover.btmgmt_socket.BluetoothSocketError("body"),
+        OSError(5, "Input/output error"),
+        asyncio.TimeoutError(),
+    ],
+)
+async def test_get_adapter_propagates_body_error(
+    exc: BaseException, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Exceptions raised by the ``async with`` body are re-raised at the yield
+    # point; they must not be mistaken for setup failures.
+    ctl = MagicMock()
+    ctl.idx = 0
+    ctl.hci_name = "hci0"
+    ctl.mac = "AA:BB:CC:DD:EE:FF"
+    ctl.setup = AsyncMock()
+    ctl.close = AsyncMock()
+    with (
+        patch.object(recover, "MGMTBluetoothCtl", return_value=ctl),
+        caplog.at_level(logging.WARNING),
+        pytest.raises(type(exc)) as caught,
+    ):
+        async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF"):
+            _raise(exc)
+    assert caught.value is exc
+    ctl.close.assert_awaited_once()
+    assert "Getting Bluetooth adapter" not in caplog.text
+
+
 @pytest.mark.asyncio
 async def test_get_adapter_timeout_logs_timeout_message(
     caplog: pytest.LogCaptureFixture,
