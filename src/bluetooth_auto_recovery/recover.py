@@ -141,6 +141,8 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
     ) -> None:
         """Initialize the protocol."""
         self.future: asyncio.Future[btmgmt_protocol.Response] | None = None
+        # (command opcode, controller index) of the command awaiting a reply.
+        self._expected: tuple[Any, int] | None = None
         self.transport: asyncio.Transport | None = None
         self.timeout = timeout
         self.connection_mode_future = connection_mode_future
@@ -162,6 +164,19 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
                 and (response := btmgmt_protocol.reader(data))
                 and response.cmd_response_frame
             ):
+                received = (
+                    response.event_frame.command_opcode,
+                    response.header.controller_idx,
+                )
+                if self._expected != received:
+                    # A late reply to an already timed-out command, or a reply
+                    # for another controller, must not resolve this future.
+                    _LOGGER.debug(
+                        "Ignoring mgmt response %s while awaiting %s",
+                        received,
+                        self._expected,
+                    )
+                    return
                 self.future.set_result(response)
         except ValueError as ex:
             # ValueError: 47 is not a valid Events may happen on newer kernels
@@ -171,6 +186,10 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
     async def send(self, *args: Any) -> btmgmt_protocol.Response:
         """Send command."""
         pkt_objs = btmgmt_protocol.command(*args)
+        self._expected = (
+            pkt_objs.header.cmd_code,
+            pkt_objs.header.controller_idx,
+        )
         self.future = self.loop.create_future()
         if self.transport is None:
             msg = "Connection was closed"
@@ -191,6 +210,7 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         finally:
             cancel_timeout.cancel()
             self.future = None
+            self._expected = None
 
     def _timeout_future(self, future: asyncio.Future[btmgmt_protocol.Response]) -> None:
         if future and not future.done():

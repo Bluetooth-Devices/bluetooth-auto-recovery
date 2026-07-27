@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import errno
 import logging
+import struct
 import time
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -1070,16 +1071,78 @@ async def test_protocol_connection_made_resolves_future() -> None:
     assert proto.connection_mode_future.done()
 
 
+def _mgmt_reply(opcode: int, controller_idx: int) -> bytes:
+    """Build a real CommandComplete reply for ``opcode`` on ``controller_idx``."""
+    params = struct.pack("<HB", opcode, 0x00) + b"\x00" * 10
+    return struct.pack("<HHH", 0x0001, controller_idx, len(params)) + params
+
+
+# btmgmt opcodes used by the correlation tests.
+_OPCODE_READ_CONTROLLER_INFORMATION = 4
+_OPCODE_SET_POWERED = 5
+
+
 @pytest.mark.asyncio
 async def test_protocol_data_received_resolves_future() -> None:
     proto = _make_protocol()
     loop = asyncio.get_running_loop()
     proto.future = loop.create_future()
-    response = MagicMock()
-    response.cmd_response_frame = MagicMock()
-    with patch.object(recover.btmgmt_protocol, "reader", return_value=response):
-        proto.data_received(b"payload")
-    assert proto.future.result() is response
+    proto._expected = (
+        recover.btmgmt_protocol.Commands.ReadControllerInformation,
+        0,
+    )
+    proto.data_received(_mgmt_reply(_OPCODE_READ_CONTROLLER_INFORMATION, 0))
+    response = proto.future.result()
+    assert (
+        response.event_frame.command_opcode
+        is recover.btmgmt_protocol.Commands.ReadControllerInformation
+    )
+
+
+@pytest.mark.asyncio
+async def test_protocol_data_received_ignores_other_opcode() -> None:
+    proto = _make_protocol()
+    loop = asyncio.get_running_loop()
+    proto.future = loop.create_future()
+    proto._expected = (
+        recover.btmgmt_protocol.Commands.ReadControllerInformation,
+        0,
+    )
+    # A late reply to an already timed-out SetPowered must not answer the
+    # ReadControllerInformation currently in flight.
+    proto.data_received(_mgmt_reply(_OPCODE_SET_POWERED, 0))
+    assert not proto.future.done()
+
+
+@pytest.mark.asyncio
+async def test_protocol_data_received_ignores_other_controller() -> None:
+    proto = _make_protocol()
+    loop = asyncio.get_running_loop()
+    proto.future = loop.create_future()
+    proto._expected = (
+        recover.btmgmt_protocol.Commands.ReadControllerInformation,
+        1,
+    )
+    # Same opcode, different controller: _find_controller polls every index on
+    # one socket, so a stale hci0 reply must not be read as hci1's.
+    proto.data_received(_mgmt_reply(_OPCODE_READ_CONTROLLER_INFORMATION, 0))
+    assert not proto.future.done()
+
+
+@pytest.mark.asyncio
+async def test_protocol_send_records_expected_reply() -> None:
+    proto = _make_protocol()
+    proto.transport = MagicMock()
+    task = asyncio.ensure_future(proto.send("SetPowered", 2, 1))
+    await asyncio.sleep(0)
+    assert proto._expected == (
+        recover.btmgmt_protocol.Commands.SetPowered,
+        2,
+    )
+    proto.data_received(_mgmt_reply(_OPCODE_SET_POWERED, 2))
+    await task
+    # Cleared once the command completes, so unsolicited frames stay ignored.
+    assert proto._expected is None
 
 
 @pytest.mark.asyncio
@@ -1099,10 +1162,7 @@ async def test_protocol_data_received_ignores_value_error() -> None:
 async def test_protocol_send_without_transport_raises() -> None:
     proto = _make_protocol()
     proto.transport = None
-    with (
-        patch.object(recover.btmgmt_protocol, "command", return_value=[]),
-        pytest.raises(recover.btmgmt_socket.BluetoothSocketError),
-    ):
+    with pytest.raises(recover.btmgmt_socket.BluetoothSocketError):
         await proto.send("ReadControllerIndexList", None)
 
 
@@ -1110,16 +1170,18 @@ async def test_protocol_send_without_transport_raises() -> None:
 async def test_protocol_send_writes_to_socket_directly() -> None:
     proto = _make_protocol()
     proto.transport = MagicMock()
-    frame = MagicMock()
-    frame.octets = b"data"
-    with patch.object(recover.btmgmt_protocol, "command", return_value=[frame]):
-        task = asyncio.ensure_future(proto.send("SetPowered", 0, 1))
-        await asyncio.sleep(0)
-        assert proto.future is not None
-        proto.future.set_result("RESPONSE")
-        result = await task
+    expected = b"".join(
+        frame.octets
+        for frame in recover.btmgmt_protocol.command("SetPowered", 0, 1)
+        if frame
+    )
+    task = asyncio.ensure_future(proto.send("SetPowered", 0, 1))
+    await asyncio.sleep(0)
+    assert proto.future is not None
+    proto.future.set_result("RESPONSE")
+    result = await task
     # The kernel-ABI workaround writes to the raw socket, not the transport.
-    cast("MagicMock", proto.sock).send.assert_called_once_with(b"data")
+    cast("MagicMock", proto.sock).send.assert_called_once_with(expected)
     cast("MagicMock", proto.transport).write.assert_not_called()
     assert result == "RESPONSE"
 
@@ -1129,12 +1191,7 @@ async def test_protocol_send_times_out() -> None:
     proto = _make_protocol()
     proto.timeout = 0.01
     proto.transport = MagicMock()
-    frame = MagicMock()
-    frame.octets = b"data"
-    with (
-        patch.object(recover.btmgmt_protocol, "command", return_value=[frame]),
-        pytest.raises(asyncio.TimeoutError),
-    ):
+    with pytest.raises(asyncio.TimeoutError):
         await proto.send("ReadControllerInformation", 0)
 
 
