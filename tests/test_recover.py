@@ -6,10 +6,14 @@ import asyncio
 import errno
 import logging
 import time
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+from usb_devices import BluetoothDevice
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from bluetooth_auto_recovery import recover
 from bluetooth_auto_recovery.recover import (
@@ -568,23 +572,42 @@ async def test_usb_reset_handles_errors(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "exc",
-    [
-        recover.NotAUSBDeviceError(),
-        FileNotFoundError(),
-    ],
-)
-async def test_usb_reset_not_applicable(
-    adapter: MGMTBluetoothCtl, exc: Exception
-) -> None:
+async def test_usb_reset_not_applicable(adapter: MGMTBluetoothCtl) -> None:
     # A non-USB adapter (no USB device behind the hci) is "not applicable" —
     # distinct from an attempted-but-failed USB reset.
     dev = MagicMock()
-    dev.async_reset = AsyncMock(side_effect=exc)
+    dev.async_reset = AsyncMock(side_effect=recover.NotAUSBDeviceError())
     with patch.object(recover, "BluetoothDevice", return_value=dev):
         outcome = await recover._usb_reset_adapter(adapter)
     assert outcome is recover.USBResetOutcome.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_usb_reset_no_parent_device_is_not_applicable(
+    adapter: MGMTBluetoothCtl, tmp_path: Path
+) -> None:
+    # A controller with no `device` entry at all (e.g. a virtual controller)
+    # has no USB device behind it, so a USB reset does not apply. Driven by a
+    # real BluetoothDevice so the sysfs semantics are exercised, not mocked.
+    dev = BluetoothDevice(0)
+    dev.path = tmp_path
+    dev.device_path = tmp_path / "device"
+    with patch.object(recover, "BluetoothDevice", return_value=dev):
+        outcome = await recover._usb_reset_adapter(adapter)
+    assert outcome is recover.USBResetOutcome.NOT_APPLICABLE
+
+
+@pytest.mark.asyncio
+async def test_usb_reset_vanished_adapter_fails(adapter: MGMTBluetoothCtl) -> None:
+    # The controller still has a parent device, so a FileNotFoundError comes
+    # from the USB tree below it: the device went away mid-reset. Reporting
+    # that as "not applicable" would let recover_adapter claim success.
+    dev = MagicMock()
+    dev.device_path.is_symlink.return_value = True
+    dev.async_reset = AsyncMock(side_effect=FileNotFoundError())
+    with patch.object(recover, "BluetoothDevice", return_value=dev):
+        outcome = await recover._usb_reset_adapter(adapter)
+    assert outcome is recover.USBResetOutcome.FAILED
 
 
 # ---------------------------------------------------------------------------
