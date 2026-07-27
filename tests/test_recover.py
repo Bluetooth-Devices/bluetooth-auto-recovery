@@ -1157,6 +1157,64 @@ async def test_protocol_connection_lost_clears_transport() -> None:
 
 
 @pytest.mark.asyncio
+async def test_protocol_send_fails_fast_when_connection_lost() -> None:
+    proto = _make_protocol()
+    proto.transport = MagicMock()
+    frame = MagicMock()
+    frame.octets = b"data"
+    with patch.object(recover.btmgmt_protocol, "command", return_value=[frame]):
+        task = asyncio.ensure_future(proto.send("SetPowered", 0, 1))
+        await asyncio.sleep(0)
+        proto.connection_lost(OSError("dropped"))
+        # The in-flight command fails immediately with the real cause instead
+        # of waiting out the protocol timeout for a generic TimeoutError.
+        with pytest.raises(ConnectionResetError, match="dropped"):
+            await task
+    assert proto.future is None
+
+
+@pytest.mark.asyncio
+async def test_protocol_send_fails_fast_on_clean_close() -> None:
+    proto = _make_protocol()
+    proto.transport = MagicMock()
+    frame = MagicMock()
+    frame.octets = b"data"
+    with patch.object(recover.btmgmt_protocol, "command", return_value=[frame]):
+        task = asyncio.ensure_future(proto.send("SetPowered", 0, 1))
+        await asyncio.sleep(0)
+        proto.connection_lost(None)
+        with pytest.raises(ConnectionResetError, match="was closed"):
+            await task
+
+
+@pytest.mark.asyncio
+async def test_protocol_connection_lost_leaves_resolved_future_alone() -> None:
+    proto = _make_protocol()
+    loop = asyncio.get_running_loop()
+    proto.transport = MagicMock()
+    proto.future = loop.create_future()
+    sentinel = MagicMock()
+    proto.future.set_result(sentinel)
+    # A response that already landed must not be overwritten by the close.
+    proto.connection_lost(OSError("dropped"))
+    assert proto.future.result() is sentinel
+
+
+@pytest.mark.asyncio
+async def test_protocol_send_leaves_no_future_when_transport_is_gone() -> None:
+    proto = _make_protocol()
+    proto.transport = None
+    with (
+        patch.object(recover.btmgmt_protocol, "command", return_value=[]),
+        pytest.raises(recover.btmgmt_socket.BluetoothSocketError),
+    ):
+        await proto.send("ReadControllerIndexList", None)
+    # No caller is left to retrieve a future created before the raise, so a
+    # later connection_lost must have nothing to fail.
+    assert proto.future is None
+
+
+@pytest.mark.asyncio
 async def test_protocol_connection_made_with_resolved_future() -> None:
     proto = _make_protocol()
     # Future already resolved (e.g. a second connection_made) must not be

@@ -171,7 +171,6 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
     async def send(self, *args: Any) -> btmgmt_protocol.Response:
         """Send command."""
         pkt_objs = btmgmt_protocol.command(*args)
-        self.future = self.loop.create_future()
         if self.transport is None:
             msg = "Connection was closed"
             raise btmgmt_socket.BluetoothSocketError(msg)
@@ -183,11 +182,15 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         # See: https://github.com/home-assistant/core/issues/152204
         data = b"".join(frame.octets for frame in pkt_objs if frame)
         self.sock.send(data)
+        # Created only once the command is on the wire so no caller-less future
+        # is ever left pending on self (data_received cannot run in between:
+        # there is no await between the send and the assignment).
+        self.future = future = self.loop.create_future()
         cancel_timeout = self.loop.call_later(
-            self.timeout, self._timeout_future, self.future
+            self.timeout, self._timeout_future, future
         )
         try:
-            return await self.future
+            return await future
         finally:
             cancel_timeout.cancel()
             self.future = None
@@ -201,6 +204,16 @@ class BluetoothMGMTProtocol(asyncio.Protocol):
         if exc:
             _LOGGER.warning("Bluetooth management socket connection lost: %s", exc)
         self.transport = None
+        if (future := self.future) and not future.done():
+            # The kernel can never answer a command once the socket is gone, so
+            # waiting out the protocol timeout only delays the failure and
+            # reports it as a generic timeout instead of the real cause.
+            msg = (
+                f"Bluetooth management socket connection lost: {exc}"
+                if exc
+                else "Bluetooth management socket was closed"
+            )
+            future.set_exception(ConnectionResetError(msg))
 
 
 class MGMTBluetoothCtl:
