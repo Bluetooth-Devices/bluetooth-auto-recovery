@@ -268,11 +268,24 @@ class MGMTBluetoothCtl:
         return self.hci_name
 
     async def close(self) -> None:
-        """Close the management interface."""
-        if self.protocol and self.protocol.transport:
-            self.protocol.transport.close()
+        """Close the management interface.
+
+        Idempotent, and safe to call when ``setup()`` never got as far as
+        opening the socket. ``_get_adapter`` closes the adapter on every exit
+        path, including the ones where ``setup()`` raised — previously that
+        meant either ``btmgmt_socket.close(None)`` (``AttributeError``) when
+        the socket was never opened, or a second ``detach()`` on an already
+        closed socket (``EBADF``) when ``setup()`` had closed it itself. Both
+        surfaced as a spurious "Closing Bluetooth adapter failed" warning right
+        after the real diagnosis.
+        """
+        if self.protocol is not None:
+            if self.protocol.transport is not None:
+                self.protocol.transport.close()
             self.protocol = None
-        btmgmt_socket.close(self.sock)
+        if self.sock is not None:
+            btmgmt_socket.close(self.sock)
+            self.sock = None
 
     async def setup(self) -> None:
         """Set up management interface."""
@@ -294,7 +307,7 @@ class MGMTBluetoothCtl:
                 )
                 await connection_made_future
         except asyncio.TimeoutError:
-            btmgmt_socket.close(sock)
+            await self.close()
             raise
         if not isinstance(protocol, BluetoothMGMTProtocol):
             msg = (

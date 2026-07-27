@@ -136,22 +136,59 @@ async def test_close_closes_transport_and_socket() -> None:
     protocol = MagicMock()
     protocol.transport = transport
     ctl.protocol = cast("BluetoothMGMTProtocol | None", protocol)
-    ctl.sock = MagicMock()
+    sock = ctl.sock = MagicMock()
     with patch.object(recover.btmgmt_socket, "close") as mock_close:
         await ctl.close()
     transport.close.assert_called_once()
     assert ctl.protocol is None
-    mock_close.assert_called_once_with(ctl.sock)
+    mock_close.assert_called_once_with(sock)
 
 
 @pytest.mark.asyncio
 async def test_close_no_protocol() -> None:
     ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
     ctl.protocol = None
-    ctl.sock = MagicMock()
+    sock = ctl.sock = MagicMock()
     with patch.object(recover.btmgmt_socket, "close") as mock_close:
         await ctl.close()
-    mock_close.assert_called_once_with(ctl.sock)
+    mock_close.assert_called_once_with(sock)
+
+
+@pytest.mark.asyncio
+async def test_close_without_socket_is_a_noop() -> None:
+    """A setup() that failed before opening the socket must still close cleanly."""
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    with patch.object(recover.btmgmt_socket, "close") as mock_close:
+        await ctl.close()
+    mock_close.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_close_is_idempotent() -> None:
+    """The socket is only handed to btmgmt_socket.close() once."""
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    protocol = MagicMock()
+    protocol.transport = MagicMock()
+    ctl.protocol = cast("BluetoothMGMTProtocol | None", protocol)
+    sock = ctl.sock = MagicMock()
+    with patch.object(recover.btmgmt_socket, "close") as mock_close:
+        await ctl.close()
+        await ctl.close()
+    mock_close.assert_called_once_with(sock)
+    assert ctl.sock is None
+
+
+@pytest.mark.asyncio
+async def test_close_clears_protocol_without_transport() -> None:
+    """A connection already lost still leaves the adapter closed."""
+    ctl = MGMTBluetoothCtl("hci0", "AA:BB:CC:DD:EE:FF", 5)
+    protocol = MagicMock()
+    protocol.transport = None
+    ctl.protocol = cast("BluetoothMGMTProtocol | None", protocol)
+    ctl.sock = MagicMock()
+    with patch.object(recover.btmgmt_socket, "close"):
+        await ctl.close()
+    assert ctl.protocol is None
 
 
 def test_require_protocol_raises_before_setup() -> None:
@@ -1051,6 +1088,29 @@ async def test_get_adapter_skips_close_when_construction_fails() -> None:
             assert got is None
 
 
+@pytest.mark.asyncio
+async def test_get_adapter_socket_open_failure_does_not_warn_on_close(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed socket open must not be followed by a bogus close warning.
+
+    ``_get_adapter`` closes the adapter on every exit path, so a real
+    ``MGMTBluetoothCtl`` whose ``btmgmt_socket.open()`` raised has to survive
+    ``close()`` with no socket of its own to close.
+    """
+    unavailable = recover.btmgmt_socket.BluetoothSocketError("Operation not permitted")
+
+    with (
+        patch.object(recover.btmgmt_socket, "open", side_effect=unavailable),
+        caplog.at_level(logging.WARNING),
+    ):
+        async with recover._get_adapter("hci0", "AA:BB:CC:DD:EE:FF") as got:
+            assert got is None
+
+    assert "cannot create a bluetooth socket" in caplog.text
+    assert "Closing Bluetooth adapter" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # BluetoothMGMTProtocol
 # ---------------------------------------------------------------------------
@@ -1259,10 +1319,16 @@ async def test_setup_timeout_closes_socket() -> None:
         patch.object(loop, "_create_connection_transport", hang),
         patch.object(recover, "asyncio_timeout", lambda _t: real_timeout(0.01)),
         patch.object(recover.btmgmt_socket, "close") as mock_close,
-        pytest.raises(asyncio.TimeoutError),
     ):
-        await ctl.setup()
+        with pytest.raises(asyncio.TimeoutError):
+            await ctl.setup()
+        # _get_adapter closes the adapter in its finally even when setup()
+        # raised; that must not close the socket a second time, since a second
+        # detach() on a closed socket raises EBADF.
+        await ctl.close()
+
     mock_close.assert_called_once_with(sock)
+    assert ctl.sock is None
 
 
 # ---------------------------------------------------------------------------
